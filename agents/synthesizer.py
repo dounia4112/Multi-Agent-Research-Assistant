@@ -4,39 +4,41 @@ project_root = os.path.abspath(os.path.join(current_dir, '..'))
 sys.path.append(project_root)
 
 from state import ResearchState
-from langchain_google_genai import ChatGoogleGenerativeAI
+from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 import json
-import logging
-from dotenv import load_dotenv
-
 
 load_dotenv(override=True)
 
-logger = logging.getLogger(__name__)
-
-PLANNER_PROMPT = """
-You are a research planner. Given a research question, decompose it into
-3-5 specific, searchable sub-tasks. Each sub-task should be a focused
-search query on its own.
+SYNTH_PROMPT = """
+You are a research analyst. Given these search results about "{query}",
+extract a list of unique, factual claims. Remove duplicates.
 
 Return ONLY valid JSON, no explanation, no markdown fences.
 
-Format: {{"sub_tasks": ["task1", "task2", "task3"]}}
+Format: {{"facts": ["fact1", "fact2", "fact3", ...]}}
 
-Research question: {query}
+Search results:
+{results_text}
 """
 
 
-def planner(state:ResearchState) -> ResearchState:
+def synthesizer(state: ResearchState)-> ResearchState:
     llm = ChatGroq(
         model = "llama-3.1-8b-instant",
         temperature = 0
     )
 
-    response = llm.invoke(PLANNER_PROMPT.format(query = state['query']))
+    results_text = "\n\n".join([
+        f"[{r['title']}] ({r['url']})\n{r['content']}"
+        for r in state["search_results"]
+    ])
 
-    # Strip markdown fences if the model adds them anyway
+    response = llm.invoke(SYNTH_PROMPT.format(
+        query = state['query'],
+        results_text =results_text[:8000]
+    ))
+
     content = response.content.strip()
 
     if content.startswith("```"):
@@ -44,10 +46,9 @@ def planner(state:ResearchState) -> ResearchState:
         if content.startswith('json'):
             content = content[4:]
 
-    
     parsed = json.loads(content)
 
-    state['sub_tasks'] = parsed["sub_tasks"]
-    state['current_task_idx'] = 0
+
+    state["synthesized_facts"] = parsed["facts"]
 
     return state
