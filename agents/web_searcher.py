@@ -11,13 +11,13 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]
 
-def web_searcher(state: ResearchState) -> ResearchState:
+def web_searcher(state: ResearchState) -> dict:
     tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
 
     idx = state['current_task_idx']
     current_sub_task = state['sub_tasks'][idx]
 
-    result = tavily_client.search(current_sub_task, max_results=5)
+    result = tavily_client.search(current_sub_task, max_results=2)
 
     filtered_results = [
         {
@@ -31,6 +31,7 @@ def web_searcher(state: ResearchState) -> ResearchState:
     existing = state.get("search_results", [])
     
 
-    state['search_results'] = existing + filtered_results
-    state['current_task_idx'] = idx +1
-    return state
+    return {
+        "search_results":   existing + filtered_results,
+        "current_task_idx": idx + 1        # advance to next sub-task
+    }

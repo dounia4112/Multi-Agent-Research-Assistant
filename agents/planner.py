@@ -28,7 +28,7 @@ Research question: {query}
 """
 
 
-def planner(state:ResearchState) -> ResearchState:
+def planner(state:ResearchState) -> dict:
     llm = ChatGroq(
         model = "llama-3.1-8b-instant",
         temperature = 0
@@ -47,7 +47,7 @@ def planner(state:ResearchState) -> ResearchState:
     
     parsed = json.loads(content)
 
-    state['sub_tasks'] = parsed["sub_tasks"]
-    state['current_task_idx'] = 0
-
-    return state
+    return {
+        "sub_tasks": parsed["sub_tasks"],
+        "current_task_idx": 0
+    }

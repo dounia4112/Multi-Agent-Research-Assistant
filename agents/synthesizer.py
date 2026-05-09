@@ -23,9 +23,9 @@ Search results:
 """
 
 
-def synthesizer(state: ResearchState)-> ResearchState:
+def synthesizer(state: ResearchState)-> dict:
     llm = ChatGroq(
-        model = "llama-3.1-8b-instant",
+        model = "llama-3.3-70b-versatile",
         temperature = 0
     )
 
@@ -49,6 +49,6 @@ def synthesizer(state: ResearchState)-> ResearchState:
     parsed = json.loads(content)
 
 
-    state["synthesized_facts"] = parsed["facts"]
-
-    return state
+    return {
+        "synthesized_facts": parsed["facts"]
+    }
