@@ -6,7 +6,7 @@
 
 ![Demo GIF](assets/demo.gif)
 
-🔗 **Try it live:** [[https://YOUR-APP-NAME.streamlit.app](https://multi-agent-research-assistant-2sxxnwubq7cwcae4fvhnqq.streamlit.app/)]([https://YOUR-APP-NAME.streamlit.app](https://multi-agent-research-assistant-2sxxnwubq7cwcae4fvhnqq.streamlit.app/))
+🔗 **Try it live:** [https://multi-agent-research-assistant-2sxxnwubq7cwcae4fvhnqq.streamlit.app/]
 
 
 ---
@@ -69,28 +69,6 @@ The two frontends connect to this pipeline differently:
 
 ---
 
-## 🗂️ Project Structure
-
-```
-multi-agent-researcher/
-│
-├── agents/                 # one file per agent
-│   ├── planner.py
-│   ├── web_searcher.py
-│   ├── synthesizer.py
-│   ├── writer.py
-│   └── grader.py
-│
-├── state.py                # shared ResearchState definition
-├── graph.py                # LangGraph graph wiring
-├── main.py                 # FastAPI backend (optional)
-├── frontend.py             # Streamlit app
-├── requirements.txt
-└── .env                    # API keys (not committed)
-```
-
----
-
 ## 🚀 Getting Started
 
 ### 1. Clone and install
@@ -116,7 +94,6 @@ TAVILY_API_KEY=your_tavily_key_here
 ```bash
 streamlit run frontend.py
 ```
-Open `http://localhost:8501`, type a question, and watch the agents work in real time.
 
 **FastAPI (optional):**
 ```bash
