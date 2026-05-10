@@ -6,7 +6,7 @@
 
 ![Demo GIF](assets/demo.gif)
 
-🔗 **Try it live:** [https://multi-agent-research-assistant-2sxxnwubq7cwcae4fvhnqq.streamlit.app/]
+🔗 **Try it live:** https://multi-agent-research-assistant-2sxxnwubq7cwcae4fvhnqq.streamlit.app/
 
 
 ---
