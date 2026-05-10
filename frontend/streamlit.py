@@ -13,7 +13,6 @@ from graph import build_graph
 
 st.set_page_config(page_title="Multi-Agent Research Assistant", page_icon="🔬", layout="wide")
 st.title("🔬 Multi-Agent Research Assistant")
-st.caption("Powered by LangGraph · Groq · Tavily")
 
 graph = build_graph()
 
