@@ -4,7 +4,6 @@ project_root = os.path.abspath(os.path.join(current_dir, '..'))
 sys.path.append(project_root)
 
 from state import ResearchState
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 import json
 import logging
