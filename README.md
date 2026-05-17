@@ -2,7 +2,7 @@
 
 ---
 
-## 📸 Demo
+## 📸 Sreamlit Demo
 
 ![Demo GIF](assets/demo.gif)
 
