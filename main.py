@@ -37,7 +37,7 @@ initial_state_template = {
 # Serve the HTML at root
 @app.get("/", response_class=FileResponse)
 def index():
-    return FileResponse("frontend/research-assistant.html")
+    return FileResponse("index.html")
 
 @app.post("/research")
 async def research(request: QueryRequest):
