@@ -99,7 +99,7 @@ streamlit run frontend.py
 ```bash
 uvicorn main:app --reload
 ```
-API at `http://127.0.0.1:8000` · Interactive docs at `http://127.0.0.1:8000/docs`
+Interface at `http://127.0.0.1:8000` · Interactive docs at `http://127.0.0.1:8000/docs`
 
 ---
 
