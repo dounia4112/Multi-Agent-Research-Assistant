@@ -2,7 +2,7 @@
 
 ---
 
-## 📸 Sreamlit Demo
+## 📸 Streamlit Demo
 
 ![Demo GIF](assets/demo.gif)
 
