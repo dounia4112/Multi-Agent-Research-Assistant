@@ -9,13 +9,14 @@ from graph import build_graph
 
 st.set_page_config(page_title="Research Assistant", layout="wide", page_icon="🔬")
 
-# Read the HTML file
-with open(os.path.join(os.path.dirname(__file__), "research-assistant.html"), "r") as f:
-    html = f.read()
-
 graph = build_graph()
 
-# ── Handle query from URL params ──────────────────────────
+# Read HTML
+html_path = os.path.join(os.path.dirname(__file__), "research-assistant.html")
+with open(html_path, "r", encoding="utf-8") as f:
+    html = f.read()
+
+# Handle submitted query
 query = st.query_params.get("query", "")
 
 if query:
@@ -28,10 +29,10 @@ if query:
         "next_agent": "", "is_done": False
     }
 
+    # Run graph directly — no API
     agent_updates = []
     facts = []
 
-    # Run graph and collect updates
     for chunk in graph.stream(initial_state):
         agent_name  = list(chunk.keys())[0]
         agent_state = chunk[agent_name]
@@ -52,10 +53,9 @@ if query:
 
         agent_updates.append({"agent": agent_name, "message": msg})
 
-    # Get final state
     final = graph.invoke(initial_state)
 
-    # Pass results back to HTML via injected JS
+    # Inject results into HTML as a JS global variable
     result_json = json.dumps({
         "agent_updates": agent_updates,
         "facts":         facts,
@@ -65,25 +65,27 @@ if query:
         "query":         query
     })
 
-    # Inject result into HTML as a global variable
     html = html.replace(
         "</head>",
         f"<script>window.__RESULT__ = {result_json};</script></head>"
     )
 
-# Inject Streamlit bridge script into HTML
-bridge_script = """
+# Inject bridge — overrides runResearch() to use URL params instead of fetch()
+html = html.replace("</body>", """
 <script>
-// If result already loaded (passed from Python), render it directly
+function runResearch() {
+  const query = document.getElementById('queryInput').value.trim();
+  if (!query) return;
+  window.parent.location.href = window.parent.location.pathname
+    + '?query=' + encodeURIComponent(query);
+}
+
 if (window.__RESULT__) {
   document.addEventListener('DOMContentLoaded', function() {
     const r = window.__RESULT__;
-
-    // Show progress wrap
     document.getElementById('progressWrap').style.display = 'block';
-    document.getElementById('emptyState') && (document.getElementById('emptyState').style.display = 'none');
-
-    // Replay agent updates
+    const emptyState = document.getElementById('emptyState');
+    if (emptyState) emptyState.style.display = 'none';
     const output = document.getElementById('outputArea');
     output.innerHTML = '<div class="log-stream" id="logStream"></div>';
 
@@ -92,39 +94,23 @@ if (window.__RESULT__) {
         setAgentState(u.agent, 'done', u.message);
         addLog(u.agent, u.message, true);
         const idx = AGENTS.findIndex(a => a.key === u.agent);
-        if (idx < AGENTS.length - 1) setAgentState(AGENTS[idx+1].key, 'running');
+        if (idx < AGENTS.length - 1) setAgentState(AGENTS[idx + 1].key, 'running');
       }, i * 300);
     });
 
-    // Show facts
     setTimeout(() => {
-      if (r.facts && r.facts.length) {
-        r.facts.forEach((f, i) => showFact(f, i));
-      }
+      if (r.facts && r.facts.length) r.facts.forEach((f, i) => showFact(f, i));
     }, r.agent_updates.length * 300);
 
-    // Render report
     setTimeout(() => {
       renderReport(r);
       setStatus('Done', false);
     }, r.agent_updates.length * 300 + 500);
 
-    // Pre-fill query input
-    if (r.query) document.getElementById('queryInput').value = r.query;
+    document.getElementById('queryInput').value = r.query || '';
   });
 }
-
-// Override runResearch to use Streamlit URL params instead of fetch
-function runResearch() {
-  const query = document.getElementById('queryInput').value.trim();
-  if (!query) return;
-  // Navigate to same page with query param — Streamlit picks it up
-  window.parent.location.href = window.parent.location.pathname + '?query=' + encodeURIComponent(query);
-}
 </script>
-"""
+</body>""")
 
-html = html.replace("</body>", bridge_script + "</body>")
-
-# Render the HTML
 st.components.v1.html(html, height=950, scrolling=False)
