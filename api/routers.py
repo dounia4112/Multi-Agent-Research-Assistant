@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from graph import build_graph
 from models.query_class import QueryRequest
+from database.db import save_run
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -37,6 +38,14 @@ def root():
 async def research(request : QueryRequest):
     state = {"query": request, **initial_state_template}
     result = graph.invoke(state)
+
+    save_run(
+        query    = request.query.strip(),
+        report   = result["draft"],
+        facts    = result["synthesized_facts"],
+        grade    = result["grade"],
+        revision = result["revision"]
+    )
 
     return {
         "query":    request.query,

@@ -2,14 +2,12 @@ import os, sys
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '..'))
 sys.path.append(project_root)
-import streamlit as st
-
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from dotenv import load_dotenv
-load_dotenv(override=True)
 
 from graph import build_graph
+from database.db import save_run
+import streamlit as st
+from dotenv import load_dotenv
+load_dotenv(override=True)
 
 st.set_page_config(page_title="Multi-Agent Research Assistant", page_icon="🔬", layout="wide")
 st.title("🔬 Multi-Agent Research Assistant")
@@ -88,6 +86,14 @@ if run and query:
 
     # Show final report
     final_state = graph.invoke(initial_state)
+
+    save_run(
+        query    = query.strip(),
+        report   = final_state["draft"],
+        facts    = final_state["synthesized_facts"],
+        grade    = final_state["grade"],
+        revision = final_state["revision"]
+    )
     report_box.markdown(final_state["draft"])
     st.success(f"✅ Done — {len(final_state['synthesized_facts'])} facts · "
             f"{final_state['revision']} revision(s) · Grade: {final_state['grade']}")
