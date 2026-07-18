@@ -10,40 +10,87 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 st.set_page_config(page_title="Multi-Agent Research Assistant", page_icon="🔬", layout="wide")
+
+st.markdown("""
+<style>
+  .block-container { padding-top: 2.5rem; }
+  div[data-testid="stTextInput"] input {
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 0.95rem;
+  }
+  div[data-testid="stButton"] button {
+    border-radius: 8px;
+    font-weight: 600;
+    padding: 0.5rem 1.4rem;
+  }
+  .agent-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(128,128,128,0.25);
+    background: rgba(128,128,128,0.05);
+    transition: all 0.25s ease;
+  }
+  .agent-card.running {
+    border-color: #c8b87a;
+    background: rgba(200,184,122,0.10);
+  }
+  .agent-card.done {
+    border-color: #7a9e8a;
+    background: rgba(122,158,138,0.10);
+  }
+  .agent-icon { font-size: 1.15rem; flex-shrink: 0; }
+  .agent-label { font-weight: 600; font-size: 0.85rem; }
+  .agent-msg   { font-size: 0.75rem; opacity: 0.65; }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🔬 Multi-Agent Research Assistant")
 
 graph = build_graph()
 
+AGENTS = [
+    {"key": "planner",      "label": "Planner",      "icon": "🗂️", "sub": "Query decomposition"},
+    {"key": "web_searcher", "label": "Web Searcher",  "icon": "🌐", "sub": "Tavily search"},
+    {"key": "synthesizer",  "label": "Synthesizer",   "icon": "🔗", "sub": "Fact extraction"},
+    {"key": "writer",       "label": "Writer",        "icon": "✍️", "sub": "Report drafting"},
+    {"key": "grader",       "label": "Grader",        "icon": "✅", "sub": "Quality review"},
+]
+
+def render_agent_card(slot, agent, state="idle", msg=None):
+    icon = agent["icon"] if state != "idle" else "⬜"
+    slot.markdown(
+        f'<div class="agent-card {state}">'
+        f'<span class="agent-icon">{icon}</span>'
+        f'<div><div class="agent-label">{agent["label"]}</div>'
+        f'<div class="agent-msg">{msg or agent["sub"]}</div></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
 query = st.text_input("Enter your research question",
     placeholder="e.g. What is the impact of LLMs on software engineering jobs in 2025?")
 
-run = st.button("Research", type="primary", disabled=not query)
+run = st.button("🚀 Research", type="primary", disabled=not query)
 
 if run and query:
     col1, col2 = st.columns([1, 2])
 
     with col1:
-        st.subheader("Agent Progress")
-        slots = {
-            "planner":      st.empty(),
-            "web_searcher": st.empty(),
-            "synthesizer":  st.empty(),
-            "writer":       st.empty(),
-            "grader":       st.empty(),
-        }
-        for name, slot in slots.items():
-            slot.markdown(f"⬜ **{name.replace('_', ' ').title()}** — waiting")
+        progress_bar = st.progress(0)
+        slots = {a["key"]: st.empty() for a in AGENTS}
+        for a in AGENTS:
+            render_agent_card(slots[a["key"]], a)
         facts_box = st.empty()
 
     with col2:
         st.subheader("Research Report")
         report_box = st.empty()
         report_box.info("Report will appear here once complete...")
-
-    icons = {
-        "planner": "🗂️", "web_searcher": "🌐",
-        "synthesizer": "🔗", "writer": "✍️", "grader": "✅"
-    }
 
     initial_state = {
         "query": query,
@@ -54,49 +101,69 @@ if run and query:
         "next_agent": "", "is_done": False
     }
 
-    # Stream graph updates directly
-    for chunk in graph.stream(initial_state):
-        agent_name  = list(chunk.keys())[0]
-        agent_state = chunk[agent_name]
+    full_state = dict(initial_state)
+    seen_agents = set()
 
-        if agent_name in slots:
-            icon = icons.get(agent_name, "🔄")
-            label = agent_name.replace("_", " ").title()
+    try:
+        with st.spinner("Agents are researching..."):
+            # Stream graph updates directly — the accumulated full_state
+            # below already holds the final result, so we don't need a
+            # second graph.invoke() call once the stream finishes.
+            for chunk in graph.stream(initial_state):
+                agent_name  = list(chunk.keys())[0]
+                agent_state = chunk[agent_name]
+                full_state.update(agent_state)
 
-            if agent_name == "planner":
-                msg = f"Created {len(agent_state.get('sub_tasks', []))} sub-tasks"
-            elif agent_name == "web_searcher":
-                msg = f"Found {len(agent_state.get('search_results', []))} results so far"
-            elif agent_name == "synthesizer":
-                msg = f"Extracted {len(agent_state.get('synthesized_facts', []))} facts"
-                facts = agent_state.get("synthesized_facts", [])
-                if facts:
-                    with facts_box.container():
-                        st.markdown("**Extracted Facts**")
-                        for f in facts:
-                            st.markdown(f"- {f}")
-            elif agent_name == "writer":
-                msg = f"Revision {agent_state.get('revision', 1)} written"
-            elif agent_name == "grader":
-                msg = f"Grade: {agent_state.get('grade', '')}"
-            else:
-                msg = "done"
+                agent = next((a for a in AGENTS if a["key"] == agent_name), None)
+                if agent:
+                    if agent_name == "planner":
+                        msg = f"Created {len(agent_state.get('sub_tasks', []))} sub-tasks"
+                    elif agent_name == "web_searcher":
+                        msg = f"Found {len(agent_state.get('search_results', []))} results so far"
+                    elif agent_name == "synthesizer":
+                        msg = f"Extracted {len(agent_state.get('synthesized_facts', []))} facts"
+                        facts = agent_state.get("synthesized_facts", [])
+                        if facts:
+                            with facts_box.container():
+                                st.markdown("**Extracted Facts**")
+                                for f in facts:
+                                    st.markdown(f"- {f}")
+                    elif agent_name == "writer":
+                        msg = f"Revision {agent_state.get('revision', 1)} written"
+                    elif agent_name == "grader":
+                        msg = f"Grade: {agent_state.get('grade', '')}"
+                    else:
+                        msg = "done"
 
-            slots[agent_name].markdown(f"{icon} **{label}** — {msg}")
+                    render_agent_card(slots[agent_name], agent, "done", msg)
+                    seen_agents.add(agent_name)
+                    progress_bar.progress(min(len(seen_agents) / len(AGENTS), 1.0))
 
-    # Show final report
-    final_state = graph.invoke(initial_state)
+        save_run(
+            query    = query.strip(),
+            report   = full_state["draft"],
+            facts    = full_state["synthesized_facts"],
+            grade    = full_state["grade"],
+            revision = full_state["revision"]
+        )
 
-    save_run(
-        query    = query.strip(),
-        report   = final_state["draft"],
-        facts    = final_state["synthesized_facts"],
-        grade    = final_state["grade"],
-        revision = final_state["revision"]
-    )
-    report_box.markdown(final_state["draft"])
-    st.success(f"✅ Done — {len(final_state['synthesized_facts'])} facts · "
-            f"{final_state['revision']} revision(s) · Grade: {final_state['grade']}")
+        report_box.markdown(full_state["draft"])
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Facts", len(full_state["synthesized_facts"]))
+        m2.metric("Revisions", full_state["revision"])
+        m3.metric("Grade", full_state["grade"] or "—")
+
+        st.download_button(
+            "⬇️ Download report (.md)",
+            data=full_state["draft"],
+            file_name="research_report.md",
+            mime="text/markdown",
+        )
+
+    except Exception as e:
+        report_box.empty()
+        st.error(f"⚠️ Research failed: {e}")
 
 
 
