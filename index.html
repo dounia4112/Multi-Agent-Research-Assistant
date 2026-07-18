@@ -803,14 +803,7 @@
           const { agent, message, payload } = data;
 
           if (agent === 'done') {
-            // fetch final and render
-            setStatus('Fetching report...', true);
-            const final = await fetch(`${API}/research`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query }),
-            }).then(r => r.json());
-            renderReport(final);
+            renderReport(payload);
             setStatus('Done', false);
             runBtn.disabled = false;
             return;

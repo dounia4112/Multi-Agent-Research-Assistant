@@ -57,9 +57,12 @@ async def research_stream(request: QueryRequest):
     state = {"query": request.query, **initial_state_template}
 
     async def event_stream():
+        full_state = dict(state)
+
         async for chunk in graph.astream(state):
             agent_name  = list(chunk.keys())[0]
             agent_state = chunk[agent_name]
+            full_state.update(agent_state)
 
             if agent_name == "planner":
                 data = {"agent": "planner", "message": f"Created {len(agent_state.get('sub_tasks', []))} sub-tasks", "payload": agent_state.get("sub_tasks", [])}
@@ -76,6 +79,13 @@ async def research_stream(request: QueryRequest):
 
             yield f"data: {json.dumps(data)}\n\n"
 
-        yield f"data: {json.dumps({'agent': 'done', 'message': 'Report complete', 'payload': []})}\n\n"
+        report = {
+            "query":    request.query,
+            "draft":    full_state.get("draft", ""),
+            "facts":    full_state.get("synthesized_facts", []),
+            "revision": full_state.get("revision", 0),
+            "grade":    full_state.get("grade", "")
+        }
+        yield f"data: {json.dumps({'agent': 'done', 'message': 'Report complete', 'payload': report})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
