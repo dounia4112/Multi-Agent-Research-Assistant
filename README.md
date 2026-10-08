@@ -2,11 +2,12 @@
 
 ---
 
-## 📸 Streamlit Demo
+## 📸 Live Demo
 
-![Demo GIF](assets/demo.gif)
+🔗 **Web app (FastAPI + custom UI):** https://multi-agent-research-assistant-7biy.onrender.com/
+🔗 **Streamlit version:** https://multi-agent-research-assistant-bnmn7379dpzcaq8fdi5d3q.streamlit.app/
 
-🔗 **Try it live:** https://multi-agent-research-assistant-bnmn7379dpzcaq8fdi5d3q.streamlit.app/
+> Hosted on free tiers: the first request after a period of inactivity can take up to a minute while the server wakes up.
 
 
 ---
@@ -74,32 +75,71 @@ The two frontends connect to this pipeline differently:
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/dounia4112/multi-agent-researcher.git
-cd multi-agent-researcher
+git clone https://github.com/dounia4112/Multi-Agent-Research-Assistant.git
+cd Multi-Agent-Research-Assistant
 pip install -r requirements.txt
 ```
 
 ### 2. Add your API keys
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env` and fill in:
 
-```env
-GROQ_API_KEY=your_groq_key_here
-TAVILY_API_KEY=your_tavily_key_here
-```
+| Variable | Required | Purpose |
+|---|---|---|
+| `GROQ_API_KEY` | ✅ | LLM calls ([console.groq.com](https://console.groq.com)) |
+| `TAVILY_API_KEY` | ✅ | Web search ([tavily.com](https://tavily.com)) |
+| `DATABASE_URL` | optional | Postgres URL to keep a history of runs; the table is created automatically |
+| `GROQ_FAST_MODEL` / `GROQ_SMART_MODEL` | optional | Override the Groq models (defaults: `openai/gpt-oss-20b` / `openai/gpt-oss-120b`) |
+| `ALLOWED_ORIGINS` | optional | Only if `index.html` is hosted on a different domain than the API |
+| `RATE_LIMIT_RUNS` / `RATE_LIMIT_WINDOW_SECONDS` | optional | Per-visitor rate limit (default 5 runs / 10 min) |
 
 ### 3. Run
 
-**Streamlit (recommended):**
-```bash
-streamlit run frontend.py
-```
-
-**FastAPI (optional):**
+**Web app (FastAPI + custom UI):**
 ```bash
 uvicorn main:app --reload
 ```
-Interface at `http://127.0.0.1:8000` · Interactive docs at `http://127.0.0.1:8000/docs`
+Interface at `http://127.0.0.1:8000` · Interactive API docs at `http://127.0.0.1:8000/docs`
+
+**Streamlit:**
+```bash
+streamlit run frontend/streamlit.py
+```
+
+### 4. Test
+
+The tests replace Groq and Tavily with fakes, so they need no API keys:
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
 
 ---
 
+## 🔌 API
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/` | Web interface |
+| `POST` | `/research` | Run the pipeline, return the final report as JSON |
+| `POST` | `/research/stream` | Server-Sent Events: one event per agent step; the final `done` event carries the report |
+| `GET` | `/history` | Last 20 runs (when `DATABASE_URL` is set) |
+| `GET` | `/health` | Health check |
+
+---
+
+## ☁️ Deployment
+
+**Web app on Render** — `render.yaml` is a ready-made blueprint:
+1. On Render, choose **New → Blueprint** and select this repository.
+2. Set `GROQ_API_KEY`, `TAVILY_API_KEY` and (optionally) `DATABASE_URL` when prompted. A free Postgres from [Neon](https://neon.tech) or [Supabase](https://supabase.com) works.
+3. Render runs `uvicorn main:app --host 0.0.0.0 --port $PORT`; the API serves the web page itself, so there is nothing else to deploy.
+
+**Streamlit Community Cloud:**
+1. New app → this repository → main file `frontend/streamlit.py`.
+2. Under **Advanced settings → Secrets**, add the same keys:
+   ```toml
+   GROQ_API_KEY = "..."
+   TAVILY_API_KEY = "..."
+   DATABASE_URL = "..."   # optional
+   ```

@@ -1,33 +1,11 @@
-import psycopg2, os, json
+"""Create the research_runs table. The API also does this on startup."""
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from dotenv import load_dotenv
-
-sql_query= """
-    CREATE TABLE research_runs (
-      id          SERIAL PRIMARY KEY,
-      query       TEXT NOT NULL,
-      report      TEXT,
-      facts       JSONB,
-      grade       VARCHAR(20),
-      revision    INT,
-      created_at  TIMESTAMP DEFAULT NOW()
-    );
-"""
-
-load_dotenv(override=True)
-
-def get_conn():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
-
-
-def init_db():
-    """Run once to create the table if it doesn't exist."""
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql_query)
-        conn.commit()
-    print("✓ Table ready")
-
-
+from database.db import init_db
 
 if __name__ == "__main__":
+    load_dotenv()
     init_db()
+    print("✓ Table ready")

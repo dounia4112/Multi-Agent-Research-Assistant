@@ -1,81 +1,151 @@
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from dotenv import load_dotenv
-from graph import build_graph
 import json
+import logging
+import os
+import threading
+import time
+from collections import defaultdict, deque
+from contextlib import asynccontextmanager
+from pathlib import Path
 
-load_dotenv(override=True)
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 
-app = FastAPI(title="Multi-Agent Research Assistant")
+from database import db
+from graph import build_graph, run_pipeline, result_summary
+from models.query_class import QueryRequest
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
+load_dotenv()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Serve the frontend folder as static files
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+INDEX_HTML = Path(__file__).parent / "index.html"
+
+# Each run costs Groq + Tavily credits, so cap how often one visitor can start one
+RATE_LIMIT_RUNS   = int(os.environ.get("RATE_LIMIT_RUNS", "5"))
+RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "600"))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if db.is_enabled():
+        try:
+            db.init_db()
+            logger.info("Database ready")
+        except Exception:
+            logger.exception("Database unavailable, history will not be saved")
+    else:
+        logger.info("DATABASE_URL not set, history disabled")
+    yield
+
+
+app = FastAPI(title="Multi-Agent Research Assistant", lifespan=lifespan)
+
+# Only needed when index.html is hosted on a different domain than the API
+allowed_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+if allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+    )
 
 graph = build_graph()
 
-class QueryRequest(BaseModel):
-    query: str
+_runs_by_client: dict[str, deque] = defaultdict(deque)
+_rate_lock = threading.Lock()
 
-initial_state_template = {
-    "sub_tasks": [], "current_task_idx": 0,
-    "search_results": [], "raw_sources": [],
-    "synthesized_facts": [], "draft": "",
-    "revision": 0, "grade": "", "feedback": "",
-    "next_agent": "", "is_done": False
-}
 
-# Serve the HTML at root
-@app.get("/", response_class=FileResponse)
+def check_rate_limit(request: Request):
+    # Render and most hosts sit behind a proxy, so prefer the forwarded client IP
+    forwarded = request.headers.get("x-forwarded-for", "")
+    client = forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    now = time.monotonic()
+
+    with _rate_lock:
+        runs = _runs_by_client[client]
+        while runs and now - runs[0] > RATE_LIMIT_WINDOW:
+            runs.popleft()
+        if len(runs) >= RATE_LIMIT_RUNS:
+            retry_in = int(RATE_LIMIT_WINDOW - (now - runs[0])) + 1
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit reached. Try again in {retry_in // 60 + 1} min.",
+                headers={"Retry-After": str(retry_in)},
+            )
+        runs.append(now)
+
+
+def save(state):
+    db.save_run(
+        query=state["query"],
+        report=state["draft"],
+        facts=state["synthesized_facts"],
+        grade=state["grade"],
+        revision=state["revision"],
+    )
+
+
+@app.get("/", include_in_schema=False)
 def index():
-    return FileResponse("index.html")
+    return FileResponse(INDEX_HTML)
 
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "history_enabled": db.is_enabled()}
+
+
+# Plain `def` routes run in a threadpool, so the blocking graph doesn't stall the server
 @app.post("/research")
-async def research(request: QueryRequest):
-    state = {"query": request.query, **initial_state_template}
-    result = graph.invoke(state)
-    return {
-        "query":    request.query,
-        "draft":    result["draft"],
-        "facts":    result["synthesized_facts"],
-        "revision": result["revision"],
-        "grade":    result["grade"]
-    }
+def research(body: QueryRequest, request: Request):
+    """Run the full pipeline and return the final report."""
+    check_rate_limit(request)
+
+    final = None
+    for _, final in run_pipeline(graph, body.query):
+        pass
+
+    save(final)
+    return result_summary(final)
+
 
 @app.post("/research/stream")
-async def research_stream(request: QueryRequest):
-    from fastapi.responses import StreamingResponse
-    state = {"query": request.query, **initial_state_template}
+def research_stream(body: QueryRequest, request: Request):
+    """Stream agent progress as Server-Sent Events. The last event carries the report."""
+    check_rate_limit(request)
 
-    async def event_stream():
-        async for chunk in graph.astream(state):
-            agent_name  = list(chunk.keys())[0]
-            agent_state = chunk[agent_name]
+    def sse(data: dict) -> str:
+        return f"data: {json.dumps(data)}\n\n"
 
-            if agent_name == "planner":
-                data = {"agent": "planner", "message": f"Created {len(agent_state.get('sub_tasks', []))} sub-tasks", "payload": agent_state.get("sub_tasks", [])}
-            elif agent_name == "web_searcher":
-                data = {"agent": "web_searcher", "message": f"Found {len(agent_state.get('search_results', []))} results so far", "payload": []}
-            elif agent_name == "synthesizer":
-                data = {"agent": "synthesizer", "message": f"Extracted {len(agent_state.get('synthesized_facts', []))} facts", "payload": agent_state.get("synthesized_facts", [])}
-            elif agent_name == "writer":
-                data = {"agent": "writer", "message": f"Draft revision {agent_state.get('revision', 1)} written", "payload": []}
-            elif agent_name == "grader":
-                data = {"agent": "grader", "message": f"Grade: {agent_state.get('grade', '')}", "payload": agent_state.get("feedback", "")}
-            else:
-                data = {"agent": agent_name, "message": "", "payload": []}
+    def event_stream():
+        final = None
+        try:
+            for event, final in run_pipeline(graph, body.query):
+                yield sse(event)
+        except Exception:
+            logger.exception("Pipeline failed for query %r", body.query)
+            yield sse({"agent": "error", "message": "The research pipeline failed. Please try again.", "payload": []})
+            return
 
-            yield f"data: {json.dumps(data)}\n\n"
+        save(final)
+        yield sse({"agent": "done", "message": "Report complete", "payload": result_summary(final)})
 
-        yield f"data: {json.dumps({'agent': 'done', 'message': 'Report complete', 'payload': []})}\n\n"
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+@app.get("/history")
+def history():
+    if not db.is_enabled():
+        return []
+    try:
+        return db.get_history()
+    except Exception:
+        logger.exception("Could not load history")
+        raise HTTPException(status_code=503, detail="History is temporarily unavailable")

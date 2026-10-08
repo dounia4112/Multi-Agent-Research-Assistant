@@ -1,98 +1,120 @@
-import os, sys
+import logging
+from typing import Iterator
+
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
 
-from state import ResearchState
+load_dotenv()   # before importing the agents, which read their model names from the env
+
+from state import ResearchState, initial_state
 from agents.planner import planner
 from agents.web_searcher import web_searcher
 from agents.synthesizer import synthesizer
 from agents.writer import writer
 from agents.grader import grader
 
-load_dotenv(override=True)
+AGENTS = {
+    "planner":      planner,
+    "web_searcher": web_searcher,
+    "synthesizer":  synthesizer,
+    "writer":       writer,
+    "grader":       grader,
+}
 
-MAX_REVISIONS = 2
 
-def supervisor_router(state:ResearchState) -> str:
+def supervisor_router(state: ResearchState) -> str:
+    """Decide which agent acts next, based only on the shared state."""
     if state.get("is_done"):
         return "END"
-    if not state.get('sub_tasks'):
+    if not state.get("sub_tasks"):
         return "planner"
-    if state.get("current_task_idx", 0) < len(state['sub_tasks']):
+    if state.get("current_task_idx", 0) < len(state["sub_tasks"]):
         return "web_searcher"
-    if not state.get('synthesized_facts'):
-        return 'synthesizer'
-    if not state.get('draft'):
-        return "writer"
-    if state.get('grade') != 'pass':
-        return "grader"
+    if not state.get("synthesized_facts"):
+        return "synthesizer"
+    if not state.get("draft") or state.get("grade") == "needs_revision":
+        return "writer"          # no draft yet, or the grader rejected it
+    if state.get("grade") == "":
+        return "grader"          # fresh draft waiting for review
     return "END"
-
 
 
 def build_graph():
     graph = StateGraph(ResearchState)
 
-    graph.add_node('planner', planner)
-    graph.add_node('web_searcher', web_searcher)
-    graph.add_node('synthesizer', synthesizer)
-    graph.add_node('writer', writer)
-    graph.add_node('grader', grader)
+    for name, fn in AGENTS.items():
+        graph.add_node(name, fn)
 
     graph.set_entry_point("planner")
 
-    # After planner → supervisor decides
-    graph.add_conditional_edges("planner", supervisor_router, {
-        "web_searcher": "web_searcher", 
-        "END": END
-    })
-
-    # After searcher → keep searching or synthesize
-    graph.add_conditional_edges("web_searcher", supervisor_router, {
-        "web_searcher": "web_searcher",
-        "synthesizer":  "synthesizer",
-        "END": END
-    })
-
-    # After synthesizer → write
-    graph.add_conditional_edges("synthesizer", supervisor_router, {
-        "writer": "writer",
-        "END": END
-    })
-
-    # After writer → grade
-    graph.add_conditional_edges("writer", supervisor_router, {
-        "grader": "grader",
-        "END": END
-    })
-
-    # After grader → revise or done
-    graph.add_conditional_edges("grader", supervisor_router, {
-        "writer": "writer",
-        "END":    END
-    })
+    # Every agent hands control back to the supervisor, which can route anywhere
+    routes = {name: name for name in AGENTS} | {"END": END}
+    for name in AGENTS:
+        graph.add_conditional_edges(name, supervisor_router, routes)
 
     return graph.compile()
 
 
+def describe_update(agent: str, state: ResearchState) -> dict:
+    """Turn one agent step into a UI-friendly progress event."""
+    if agent == "planner":
+        message = f"Created {len(state['sub_tasks'])} sub-tasks"
+        payload = state["sub_tasks"]
+    elif agent == "web_searcher":
+        message = (f"Searched {state['current_task_idx']}/{len(state['sub_tasks'])} sub-tasks · "
+                   f"{len(state['search_results'])} results")
+        payload = []
+    elif agent == "synthesizer":
+        message = f"Extracted {len(state['synthesized_facts'])} facts"
+        payload = state["synthesized_facts"]
+    elif agent == "writer":
+        message = f"Draft revision {state['revision']} written"
+        payload = []
+    elif agent == "grader":
+        message = f"Grade: {state['grade']} ({state['score']}/10)"
+        payload = state["feedback"]
+    else:
+        message, payload = "", []
 
-if __name__ == "__main__":
-    graph = build_graph()
+    return {"agent": agent, "message": message, "payload": payload,
+            "next": supervisor_router(state)}
 
-    initial_state = {
-        "query": "What is the impact of LLMs on software engineering jobs in 2025?",
-        "sub_tasks": [], "current_task_idx": 0,
-        "search_results": [], "raw_sources": [],
-        "synthesized_facts": [], "draft": "",
-        "revision": 0, "grade": "", "feedback": "",
-        "next_agent": "", "is_done": False
+
+def run_pipeline(graph, query: str) -> Iterator[tuple[dict, ResearchState]]:
+    """Run the graph once, yielding (progress event, accumulated state) per agent step.
+
+    The last yielded state is the final result, so callers never need to run
+    the graph a second time to get the report.
+    """
+    state = initial_state(query)
+    for chunk in graph.stream(state):
+        for agent, update in chunk.items():
+            state = {**state, **update}
+            yield describe_update(agent, state), state
+
+
+def result_summary(state: ResearchState) -> dict:
+    return {
+        "query":    state["query"],
+        "draft":    state["draft"],
+        "facts":    state["synthesized_facts"],
+        "revision": state["revision"],
+        "grade":    state["grade"],
+        "score":    state["score"],
     }
 
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    graph = build_graph()
+
     print("🚀 Running multi-agent research graph...\n")
-    result = graph.invoke(initial_state)
+    final = None
+    for event, final in run_pipeline(graph, "What is the impact of LLMs on software engineering jobs in 2025?"):
+        print(f"[{event['agent']}] {event['message']}")
 
     print("\n✅ Done!")
-    print(f"Revisions: {result['revision']}")
-    print(f"Facts found: {len(result['synthesized_facts'])}")
+    print(f"Revisions: {final['revision']}")
+    print(f"Facts found: {len(final['synthesized_facts'])}")
     print("\n--- FINAL REPORT ---")
-    print(result["draft"])
+    print(final["draft"])

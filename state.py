@@ -1,4 +1,5 @@
-from typing import TypedDict, List, Optional
+from typing import TypedDict, List
+
 
 class ResearchState(TypedDict):
     # User input
@@ -9,20 +10,31 @@ class ResearchState(TypedDict):
     current_task_idx: int         # tracks which sub-task is active
 
     # Searcher output
-    search_results: List[dict]    # [{url, title, snippet}, ...]
-    raw_sources: List[str]
+    search_results: List[dict]    # [{url, title, content}, ...]
 
     # Synthesizer output
     synthesized_facts: List[str]
 
     # Writer output
     draft: str
-    revision: int                 # counts writer passes, cap at 2
+    revision: int                 # counts writer passes, capped by the grader
 
     # Grader output
-    grade: str                    # "pass" | "needs_revision"
+    grade: str                    # "" (not graded yet) | "pass" | "needs_revision"
     feedback: str
+    score: int
 
     # Supervisor control
-    next_agent: str
     is_done: bool
+
+
+def initial_state(query: str) -> ResearchState:
+    return {
+        "query": query,
+        "sub_tasks": [], "current_task_idx": 0,
+        "search_results": [],
+        "synthesized_facts": [],
+        "draft": "", "revision": 0,
+        "grade": "", "feedback": "", "score": 0,
+        "is_done": False,
+    }

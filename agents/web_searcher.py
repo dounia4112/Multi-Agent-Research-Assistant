@@ -1,37 +1,37 @@
-import os, sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '..'))
-sys.path.append(project_root)
+import logging
+import os
+
+from tavily import TavilyClient
 
 from state import ResearchState
-from tavily import TavilyClient
-from dotenv import load_dotenv
 
+logger = logging.getLogger(__name__)
 
-load_dotenv(override=True)
-TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]
+RESULTS_PER_TASK = 2
+
 
 def web_searcher(state: ResearchState) -> dict:
-    tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
+    idx = state["current_task_idx"]
+    current_sub_task = state["sub_tasks"][idx]
 
-    idx = state['current_task_idx']
-    current_sub_task = state['sub_tasks'][idx]
+    try:
+        client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+        result = client.search(current_sub_task, max_results=RESULTS_PER_TASK)
+    except Exception:
+        # One failed search shouldn't kill the whole run
+        logger.exception("Search failed for sub-task %r", current_sub_task)
+        result = {}
 
-    result = tavily_client.search(current_sub_task, max_results=2)
-
-    filtered_results = [
+    new_results = [
         {
-            "url": item.get("url"),
-            "title": item.get("title"),
-            "content": item.get("content")
+            "url":     item.get("url"),
+            "title":   item.get("title"),
+            "content": item.get("content"),
         }
         for item in result.get("results", [])
     ]
 
-    existing = state.get("search_results", [])
-    
-
     return {
-        "search_results":   existing + filtered_results,
-        "current_task_idx": idx + 1        # advance to next sub-task
+        "search_results":   state.get("search_results", []) + new_results,
+        "current_task_idx": idx + 1,       # advance to next sub-task
     }

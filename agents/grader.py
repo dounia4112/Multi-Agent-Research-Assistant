@@ -1,13 +1,13 @@
-import os, sys, json
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '..'))
-sys.path.append(project_root)
+import logging
+from typing import Literal
 
-from dotenv import load_dotenv
 from langchain_groq import ChatGroq
+from pydantic import BaseModel, Field
+
+from agents.models import SMART_MODEL
 from state import ResearchState
 
-load_dotenv(override=True)
+logger = logging.getLogger(__name__)
 
 GRADER_PROMPT = """
 You are a research quality reviewer. Grade this research report.
@@ -19,50 +19,41 @@ Check all of the following:
 4. Does it have an Analysis section?
 5. Is the analysis meaningful (not just repeated bullet points)?
 
-Return ONLY valid JSON, no explanation, no markdown fences.
-
-Format:
-{{"grade": "pass" or "needs_revision", "feedback": "specific issues if needs_revision, empty string if pass", "score": 1-10}}
-
 Report to grade:
 {draft}
 """
 
 MAX_REVISIONS = 2
 
+
+class Grade(BaseModel):
+    grade: Literal["pass", "needs_revision"]
+    feedback: str = Field(default="", description="Specific issues to fix; empty if pass")
+    score: int = Field(default=0, ge=0, le=10, description="Overall quality from 1 to 10")
+
+
 def grader(state: ResearchState) -> dict:
-    if state.get("revision", 0) >= MAX_REVISIONS:
-        print("⚠ Max revisions reached — forcing pass")
-        return {"grade": "pass", "feedback": "", "is_done": True}
-
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
-
-    response = llm.invoke(GRADER_PROMPT.format(
-        query=state["query"],
-        draft=state["draft"][:5000]
-    ))
-
-    content = response.content.strip()
-    if content.startswith("```"):
-        content = content.split("```")[1]
-        if content.startswith("json"):
-            content = content[4:]
-        content = content.strip()
+    llm = ChatGroq(model=SMART_MODEL, temperature=0)
 
     try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        print("⚠ Grader JSON parse failed — defaulting to pass")
-        return {"grade": "pass", "feedback": "", "is_done": True}
+        result = llm.with_structured_output(Grade, method="json_schema").invoke(GRADER_PROMPT.format(
+            query=state["query"],
+            draft=state["draft"][:5000],
+        ))
+    except Exception:
+        logger.exception("Grader failed, accepting the current draft")
+        result = Grade(grade="pass", feedback="", score=0)
 
-    is_done = parsed["grade"] == "pass"
+    # Stop revising once the writer has had its maximum number of passes
+    if result.grade == "needs_revision" and state.get("revision", 0) >= MAX_REVISIONS:
+        logger.info("Max revisions reached, accepting the current draft")
+        result.grade = "pass"
 
-    print(f"✓ Grader: {parsed['grade']} (score: {parsed['score']}/10)")
-    if not is_done:
-        print(f"  Feedback: {parsed['feedback']}")
+    logger.info("Grader: %s (score %s/10)", result.grade, result.score)
 
     return {
-        "grade":    parsed["grade"],
-        "feedback": parsed.get("feedback", ""),
-        "is_done":  is_done
+        "grade":    result.grade,
+        "feedback": result.feedback if result.grade == "needs_revision" else "",
+        "score":    result.score,
+        "is_done":  result.grade == "pass",
     }

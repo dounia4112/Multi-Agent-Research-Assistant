@@ -502,6 +502,29 @@
     font-family: var(--mono);
     font-size: 0.7rem;
   }
+  .report-body ol { margin: 0 0 12px 1.4em; padding: 0; }
+  .report-body ol li::marker { color: var(--accent); font-family: var(--mono); font-size: 0.75rem; }
+  .report-body h3 {
+    font-family: var(--serif);
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 20px 0 8px;
+  }
+  .report-body strong { color: var(--text); font-weight: 500; }
+  .report-body a { color: var(--accent2); text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+  .report-body code {
+    font-family: var(--mono);
+    font-size: 0.8em;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 4px;
+  }
+  .report-body blockquote {
+    border-left: 2px solid var(--accent);
+    padding-left: 14px;
+    margin: 0 0 12px;
+  }
 
   /* Log stream */
   .log-stream {
@@ -567,6 +590,19 @@
   .copy-btn:hover {
     border-color: var(--accent2);
     color: var(--accent2);
+  }
+
+  /* ── Phone layout: stack the sidebar above the main column ── */
+  @media (max-width: 760px) {
+    .shell { grid-template-columns: 1fr; }
+    header { padding: 0 16px; }
+    .header-meta > span:first-child { display: none; }
+    aside { border-right: none; border-bottom: 1px solid var(--border); padding: 16px 0 0; }
+    .progress-wrap, .sidebar-section { padding: 0 16px; }
+    .input-area { padding: 20px 16px; }
+    .output-area { padding: 24px 16px; }
+    .log-agent { width: auto; }
+    .log-time { display: none; }
   }
 </style>
 </head>
@@ -640,8 +676,13 @@
   </main>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script>
-  const API = 'https://multi-agent-research-assistant-7biy.onrender.com/';
+  // Leave empty when FastAPI serves this page (same origin).
+  // If you host this file elsewhere (e.g. GitHub Pages), set it to your API URL,
+  // e.g. 'https://your-api.onrender.com', and add that page's origin to ALLOWED_ORIGINS on the API.
+  const API = ''.replace(/\/+$/, '');
 
   const AGENTS = [
     { key: 'planner',      label: 'Planner',      sub: 'Query decomposition' },
@@ -650,11 +691,36 @@
     { key: 'writer',       label: 'Writer',        sub: 'Report drafting'     },
     { key: 'grader',       label: 'Grader',        sub: 'Quality review'      },
   ];
+  const isAgent = key => AGENTS.some(a => a.key === key);
+
+  let lastReport = '';
+
+  // Everything shown on the page comes from LLM output or web content, so escape it
+  const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => HTML_ESCAPES[c]);
+  }
+
+  function markdownToSafeHtml(md) {
+    if (window.marked && window.DOMPurify) {
+      return DOMPurify.sanitize(marked.parse(md));
+    }
+    // CDN blocked: fall back to plain text rather than unsafe HTML
+    return `<p style="white-space:pre-wrap">${escapeHtml(md)}</p>`;
+  }
+
+  if (window.DOMPurify) {
+    DOMPurify.addHook('afterSanitizeAttributes', node => {
+      if (node.tagName === 'A') {
+        node.setAttribute('target', '_blank');
+        node.setAttribute('rel', 'noopener noreferrer');
+      }
+    });
+  }
 
   // Build sidebar agent rows
   const agentList = document.getElementById('agentList');
-  AGENTS.forEach((a, i) => {
-    agentList.innerHTML += `
+  agentList.innerHTML = AGENTS.map((a, i) => `
       <div class="agent-item" id="agent-${a.key}">
         <span class="agent-idx">${String(i+1).padStart(2,'0')}</span>
         <div class="agent-info">
@@ -663,8 +729,7 @@
         </div>
         <div class="spinner"></div>
         <div class="agent-check">✓</div>
-      </div>`;
-  });
+      </div>`).join('');
 
   function handleKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runResearch(); }
@@ -675,23 +740,23 @@
     document.getElementById('statusPill').className = 'status-pill' + (active ? ' active' : '');
   }
 
-  function setAgentState(key, state, msg = '') {
-    const el = document.getElementById(`agent-${key}`);
-    const msgEl = document.getElementById(`msg-${key}`);
-    if (!el) return;
-    el.className = `agent-item ${state}`;
-    if (msg) msgEl.textContent = msg;
-    // update progress
+  function updateProgress() {
     const done = document.querySelectorAll('.agent-item.done').length;
     const pct  = Math.round((done / AGENTS.length) * 100);
     document.getElementById('progressFill').style.width = pct + '%';
     document.getElementById('progressPct').textContent  = pct + '%';
   }
 
+  function setAgentState(key, state, msg = '') {
+    const el = document.getElementById(`agent-${key}`);
+    if (!el) return;
+    el.className = `agent-item ${state}`;
+    if (msg) document.getElementById(`msg-${key}`).textContent = msg;
+    updateProgress();
+  }
+
   function resetAgents() {
     AGENTS.forEach(a => setAgentState(a.key, '', a.sub));
-    document.getElementById('progressFill').style.width = '0%';
-    document.getElementById('progressPct').textContent  = '0%';
     document.getElementById('factsSection').style.display = 'none';
     document.getElementById('factsList').innerHTML = '';
     document.getElementById('progressWrap').style.display = 'block';
@@ -701,87 +766,122 @@
     const log = document.getElementById('logStream');
     if (!log) return;
     const now = new Date().toLocaleTimeString('en-GB', { hour12: false });
-    const cls = done ? 'log-line done' : 'log-line';
-    log.innerHTML += `
-      <div class="${cls}">
+    log.insertAdjacentHTML('beforeend', `
+      <div class="log-line${done ? ' done' : ''}">
         <span class="log-time">${now}</span>
-        <span class="log-agent">[${agent}]</span>
-        <span class="log-msg">${msg}</span>
-      </div>`;
-    log.scrollTop = log.scrollHeight;
+        <span class="log-agent">[${escapeHtml(agent)}]</span>
+        <span class="log-msg">${escapeHtml(msg)}</span>
+      </div>`);
   }
 
-  function showFact(fact, index) {
+  function showFacts(facts) {
     const list = document.getElementById('factsList');
-    const delay = index * 0.05;
-    list.innerHTML += `
-      <div class="fact-item" style="animation-delay:${delay}s">
-        <span class="fact-num">${String(index+1).padStart(2,'0')}</span>
-        <span>${fact}</span>
-      </div>`;
+    list.innerHTML = facts.map((f, i) => `
+      <div class="fact-item" style="animation-delay:${i * 0.05}s">
+        <span class="fact-num">${String(i+1).padStart(2,'0')}</span>
+        <span>${escapeHtml(f)}</span>
+      </div>`).join('');
     document.getElementById('factsSection').style.display = 'block';
   }
 
-  function renderReport(data) {
-    const output = document.getElementById('outputArea');
-    const lines  = (data.draft || '').split('\n');
-    let html = '';
-    for (const line of lines) {
-      if (line.startsWith('## '))      html += `<h2>${line.slice(3)}</h2>`;
-      else if (line.startsWith('# '))  html += `<h1>${line.slice(2)}</h1>`;
-      else if (line.startsWith('* ') || line.startsWith('- ')) html += `<ul><li>${line.slice(2)}</li></ul>`;
-      else if (line.trim() === '')     html += '';
-      else                             html += `<p>${line}</p>`;
-    }
+  function showError(html) {
+    document.getElementById('outputArea')
+      .insertAdjacentHTML('afterbegin', `<div class="error-box">⚠ ${html}</div>`);
+    setStatus('Error', false);
+    AGENTS.forEach(a => {
+      if (document.getElementById(`agent-${a.key}`).classList.contains('running')) setAgentState(a.key, '');
+    });
+  }
 
-    output.innerHTML = `
+  function renderReport(data) {
+    lastReport = data.draft || '';
+    const score = data.score ? ` · ${data.score}/10` : '';
+    document.getElementById('outputArea').innerHTML = `
       <div class="report-wrap">
         <div class="report-meta">
           <div class="report-meta-item">Facts <span class="report-meta-val">${data.facts?.length ?? '—'}</span></div>
           <div class="report-meta-item">Revisions <span class="report-meta-val">${data.revision ?? '—'}</span></div>
-          <div class="report-meta-item">Grade <span class="report-meta-val">${data.grade ?? '—'}</span></div>
-          <div class="report-meta-item">Query <span class="report-meta-val" style="font-style:italic;text-transform:none;letter-spacing:0">${document.getElementById('queryInput').value}</span></div>
+          <div class="report-meta-item">Grade <span class="report-meta-val">${escapeHtml(data.grade || '—')}${score}</span></div>
+          <div class="report-meta-item">Query <span class="report-meta-val" style="font-style:italic;text-transform:none;letter-spacing:0">${escapeHtml(data.query)}</span></div>
         </div>
-        <div class="report-body">${html}</div>
+        <div class="report-body">${markdownToSafeHtml(lastReport)}</div>
         <button class="copy-btn" onclick="copyReport()">⎘ Copy report</button>
       </div>`;
   }
 
   function copyReport() {
-    const text = document.querySelector('.report-body')?.innerText || '';
-    navigator.clipboard.writeText(text).then(() => {
+    navigator.clipboard.writeText(lastReport).then(() => {
       const btn = document.querySelector('.copy-btn');
       btn.textContent = '✓ Copied';
-      setTimeout(() => btn.innerHTML = '⎘ Copy report', 2000);
+      setTimeout(() => btn.textContent = '⎘ Copy report', 2000);
     });
+  }
+
+  // Returns true once the final report has been rendered
+  function handleEvent({ agent, message, payload, next }) {
+    if (agent === 'error') throw new Error(message);
+
+    if (agent === 'done') {
+      AGENTS.forEach(a => setAgentState(a.key, 'done'));
+      renderReport(payload);
+      setStatus('Done', false);
+      return true;
+    }
+
+    if (!isAgent(agent)) return false;
+
+    setAgentState(agent, 'done', message);
+    addLog(agent, message, true);
+
+    if (agent === 'planner') payload.forEach((t, i) => addLog('planner', `${i + 1}. ${t}`));
+    if (agent === 'synthesizer' && payload.length) showFacts(payload);
+    if (agent === 'grader' && payload) addLog('grader', `Feedback: ${payload}`);
+
+    // The supervisor tells us who acts next (the searcher repeats, the writer may revise)
+    if (isAgent(next)) {
+      if (agent === 'grader' && next === 'writer') setAgentState('grader', '', 'Revision requested');
+      setAgentState(next, 'running');
+    }
+    return false;
   }
 
   async function runResearch() {
     const query = document.getElementById('queryInput').value.trim();
-    if (!query) return;
+    if (query.length < 3) return;
 
     const runBtn = document.getElementById('runBtn');
     runBtn.disabled = true;
     setStatus('Running', true);
     resetAgents();
+    lastReport = '';
 
-    // Show log area
-    document.getElementById('emptyState') && (document.getElementById('emptyState').style.display = 'none');
     const output = document.getElementById('outputArea');
     output.innerHTML = `<div class="log-stream" id="logStream"></div>`;
 
-    // Mark first agent running
     setAgentState('planner', 'running');
     addLog('system', `Research started — "${query}"`);
 
+    // Free hosting tiers sleep when idle; tell the visitor instead of looking frozen
+    const wakeTimer = setTimeout(() => {
+      setStatus('Waking server…', true);
+      addLog('system', 'The server is waking up from sleep — the first request can take up to a minute.');
+    }, 5000);
+
+    let response;
     try {
-      const response = await fetch(`${API}/research/stream`, {
+      response = await fetch(`${API}/research/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),
       });
+      clearTimeout(wakeTimer);
+      setStatus('Running', true);
 
-      if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const detail = Array.isArray(body.detail) ? body.detail[0]?.msg : body.detail;
+        throw new Error(detail || `Server responded with ${response.status}`);
+      }
 
       const reader  = response.body.getReader();
       const decoder = new TextDecoder();
@@ -799,41 +899,16 @@
           if (!line.startsWith('data: ')) continue;
           let data;
           try { data = JSON.parse(line.slice(6)); } catch { continue; }
-
-          const { agent, message, payload } = data;
-
-          if (agent === 'done') {
-            // fetch final and render
-            setStatus('Fetching report...', true);
-            const final = await fetch(`${API}/research`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query }),
-            }).then(r => r.json());
-            renderReport(final);
-            setStatus('Done', false);
-            runBtn.disabled = false;
-            return;
-          }
-
-          if (AGENTS.find(a => a.key === agent)) {
-            setAgentState(agent, 'done', message);
-            addLog(agent, message, true);
-            const idx = AGENTS.findIndex(a => a.key === agent);
-            if (idx < AGENTS.length - 1) setAgentState(AGENTS[idx+1].key, 'running');
-          }
-
-          if (agent === 'synthesizer' && Array.isArray(payload) && payload.length) {
-            payload.forEach((f, i) => showFact(f, i));
-          }
+          if (handleEvent(data)) return;
         }
       }
+      throw new Error('The connection closed before the report was finished. Please try again.');
     } catch (e) {
-      const msg = e.message.includes('fetch') || e.message.includes('connect') || e.message.includes('Failed')
-        ? 'Cannot reach the API. Make sure <code>uvicorn main:app --reload</code> is running on port 8000.'
-        : e.message;
-      output.innerHTML = `<div class="error-box">⚠ ${msg}</div>`;
-      setStatus('Error', false);
+      clearTimeout(wakeTimer);
+      showError(!response   // fetch() itself failed: network down or server unreachable
+        ? 'Cannot reach the research API. Check your connection and try again.'
+        : escapeHtml(e.message));
+    } finally {
       runBtn.disabled = false;
     }
   }

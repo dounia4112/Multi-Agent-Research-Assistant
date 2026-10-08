@@ -1,54 +1,53 @@
-import os, sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '..'))
-sys.path.append(project_root)
+import logging
+from typing import List
 
-from state import ResearchState
-from dotenv import load_dotenv
 from langchain_groq import ChatGroq
-import json
+from pydantic import BaseModel, Field
 
-load_dotenv(override=True)
+from agents.models import SMART_MODEL
+from state import ResearchState
+
+logger = logging.getLogger(__name__)
 
 SYNTH_PROMPT = """
 You are a research analyst. Given these search results about "{query}",
 extract a list of unique, factual claims. Remove duplicates.
-
-Return ONLY valid JSON, no explanation, no markdown fences.
-
-Format: {{"facts": ["fact1", "fact2", "fact3", ...]}}
+Mention the source (title or URL) a claim comes from where possible.
 
 Search results:
 {results_text}
 """
 
+NO_RESULTS_FACT = "No web search results were found for this query."
 
-def synthesizer(state: ResearchState)-> dict:
-    llm = ChatGroq(
-        model = "llama-3.3-70b-versatile",
-        temperature = 0
+
+class Facts(BaseModel):
+    facts: List[str] = Field(description="Unique factual claims taken from the search results")
+
+
+def synthesizer(state: ResearchState) -> dict:
+    results = state["search_results"]
+    if not results:
+        return {"synthesized_facts": [NO_RESULTS_FACT]}
+
+    results_text = "\n\n".join(
+        f"[{r['title']}] ({r['url']})\n{r['content']}" for r in results
     )
 
-    results_text = "\n\n".join([
-        f"[{r['title']}] ({r['url']})\n{r['content']}"
-        for r in state["search_results"]
-    ])
+    llm = ChatGroq(model=SMART_MODEL, temperature=0)
 
-    response = llm.invoke(SYNTH_PROMPT.format(
-        query = state['query'],
-        results_text =results_text[:8000]
-    ))
+    try:
+        parsed = llm.with_structured_output(Facts, method="json_schema").invoke(SYNTH_PROMPT.format(
+            query=state["query"],
+            results_text=results_text[:8000],
+        ))
+        facts = [f.strip() for f in parsed.facts if f.strip()]
+    except Exception:
+        logger.exception("Synthesizer failed, falling back to raw snippets")
+        facts = []
 
-    content = response.content.strip()
+    # Fall back to the raw snippets so the writer always has material
+    if not facts:
+        facts = [f"{r['content']} ({r['url']})" for r in results if r.get("content")]
 
-    if content.startswith("```"):
-        content = content.split("```")[1]
-        if content.startswith('json'):
-            content = content[4:]
-
-    parsed = json.loads(content)
-
-
-    return {
-        "synthesized_facts": parsed["facts"]
-    }
+    return {"synthesized_facts": facts or [NO_RESULTS_FACT]}

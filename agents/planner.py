@@ -1,16 +1,11 @@
-import os, sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '..'))
-sys.path.append(project_root)
-
-from state import ResearchState
-from langchain_groq import ChatGroq
-import json
 import logging
-from dotenv import load_dotenv
+from typing import List
 
+from langchain_groq import ChatGroq
+from pydantic import BaseModel, Field
 
-load_dotenv(override=True)
+from agents.models import FAST_MODEL
+from state import ResearchState
 
 logger = logging.getLogger(__name__)
 
@@ -19,34 +14,30 @@ You are a research planner. Given a research question, decompose it into
 3-5 specific, searchable sub-tasks. Each sub-task should be a focused
 search query on its own.
 
-Return ONLY valid JSON, no explanation, no markdown fences.
-
-Format: {{"sub_tasks": ["task1", "task2", "task3"]}}
-
 Research question: {query}
 """
 
+MAX_SUB_TASKS = 5
 
-def planner(state:ResearchState) -> dict:
-    llm = ChatGroq(
-        model = "llama-3.1-8b-instant",
-        temperature = 0
-    )
 
-    response = llm.invoke(PLANNER_PROMPT.format(query = state['query']))
+class Plan(BaseModel):
+    sub_tasks: List[str] = Field(description="3-5 focused web search queries")
 
-    # Strip markdown fences if the model adds them anyway
-    content = response.content.strip()
 
-    if content.startswith("```"):
-        content = content.split("```")[1]
-        if content.startswith('json'):
-            content = content[4:]
+def planner(state: ResearchState) -> dict:
+    llm = ChatGroq(model=FAST_MODEL, temperature=0)
 
-    
-    parsed = json.loads(content)
+    try:
+        plan = llm.with_structured_output(Plan, method="json_schema").invoke(
+            PLANNER_PROMPT.format(query=state["query"])
+        )
+        sub_tasks = [t.strip() for t in plan.sub_tasks if t.strip()][:MAX_SUB_TASKS]
+    except Exception:
+        logger.exception("Planner failed, falling back to the raw query")
+        sub_tasks = []
 
-    return {
-        "sub_tasks": parsed["sub_tasks"],
-        "current_task_idx": 0
-    }
+    # Always hand the searcher at least one task so the pipeline can continue
+    if not sub_tasks:
+        sub_tasks = [state["query"]]
+
+    return {"sub_tasks": sub_tasks, "current_task_idx": 0}

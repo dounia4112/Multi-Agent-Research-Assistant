@@ -1,13 +1,7 @@
-import os, sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '..'))
-sys.path.append(project_root)
-
-from dotenv import load_dotenv
-from state import ResearchState
 from langchain_groq import ChatGroq
 
-load_dotenv(override=True)
+from agents.models import FAST_MODEL
+from state import ResearchState
 
 WRITER_PROMPT = """
 Write a well-structured research report in Markdown about: "{query}"
@@ -33,11 +27,9 @@ List the sources mentioned in the facts.
 Write the full report now. No preamble, start directly with ## Executive Summary.
 """
 
+
 def writer(state: ResearchState) -> dict:
-    llm = ChatGroq(
-        model="llama-3.1-8b-instant",
-        temperature=0.3
-    )
+    llm = ChatGroq(model=FAST_MODEL, temperature=0.3)
 
     revision_instruction = ""
     if state.get("feedback"):
@@ -46,18 +38,16 @@ def writer(state: ResearchState) -> dict:
             f"The previous draft was rejected. Fix these issues: {state['feedback']}"
         )
 
-    facts_text = "\n".join([f"- {f}" for f in state["synthesized_facts"]])  # fixed typo
-
+    facts_text = "\n".join(f"- {f}" for f in state["synthesized_facts"])
     response = llm.invoke(WRITER_PROMPT.format(
         query=state["query"],
         facts=facts_text,
-        revision_instruction=revision_instruction
+        revision_instruction=revision_instruction,
     ))
-
 
     return {
         "draft":    response.content.strip(),
         "revision": state.get("revision", 0) + 1,
-        "grade":    "",
-        "feedback": ""
+        "grade":    "",          # new draft → not graded yet
+        "feedback": "",
     }
