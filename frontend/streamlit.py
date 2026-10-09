@@ -2,6 +2,8 @@ import os, sys
 # `streamlit run frontend/streamlit.py` only puts frontend/ on the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from datetime import datetime, timezone
+
 import streamlit as st
 
 from database.db import save_run
@@ -131,16 +133,21 @@ elif run:
         st.error(f"⚠️ Research failed: {e}")
         st.stop()
 
-    save_run(
+    created_at = datetime.now(timezone.utc)
+    run_id = save_run(
         query=final["query"],
         report=final["draft"],
         facts=final["synthesized_facts"],
         grade=final["grade"],
         revision=final["revision"],
+        created_at=created_at,
     )
 
     progress_bar.progress(1.0)
-    report_box.markdown(final["draft"])
+    with report_box.container():
+        saved = f" · saved as report #{run_id}" if run_id else ""
+        st.caption(f"🗓️ Generated {created_at:%d %b %Y, %H:%M} UTC{saved}")
+        st.markdown(final["draft"])
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Facts", len(final["synthesized_facts"]))
@@ -150,6 +157,6 @@ elif run:
     st.download_button(
         "⬇️ Download report (.md)",
         data=final["draft"],
-        file_name="research_report.md",
+        file_name=f"research_report_{created_at:%Y-%m-%d}.md",
         mime="text/markdown",
     )

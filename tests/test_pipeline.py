@@ -49,7 +49,7 @@ class FakeTavily:
 @pytest.fixture
 def offline(monkeypatch):
     monkeypatch.setenv("TAVILY_API_KEY", "test")
-    monkeypatch.delenv("DATABASE_URL", raising=False)   # never write test runs to a real DB
+    monkeypatch.setenv("DATABASE_URL", "")
     monkeypatch.setattr(search_mod, "TavilyClient", FakeTavily)
 
     def install(grades):
@@ -146,6 +146,8 @@ def test_stream_endpoint_sends_report_in_done_event(offline, monkeypatch):
 
         assert events[-1]["agent"] == "done"
         assert events[-1]["payload"]["draft"].startswith("## Executive Summary")
+        assert events[-1]["payload"]["created_at"]          # report is dated even without a DB
+        assert events[-1]["payload"]["saved"] is False
         assert client.post("/research/stream", json={"query": "  "}).status_code == 422
 
 
@@ -160,3 +162,27 @@ def test_rate_limit(offline, monkeypatch):
     with TestClient(main.app) as client:
         assert client.post("/research", json={"query": "first"}).status_code == 200
         assert client.post("/research", json={"query": "second"}).status_code == 429
+
+
+def test_report_is_saved_with_its_date(offline, monkeypatch):
+    from datetime import datetime
+    from fastapi.testclient import TestClient
+    import main
+
+    saved = {}
+
+    def fake_save_run(**kwargs):
+        saved.update(kwargs)
+        return 42
+
+    monkeypatch.setattr(main.db, "save_run", fake_save_run)
+    main._runs_by_client.clear()
+    offline([grader_mod.Grade(grade="pass", score=9)])
+
+    with TestClient(main.app) as client:
+        body = client.post("/research", json={"query": "dated query"}).json()
+
+    assert body["saved"] is True and body["id"] == 42
+    assert saved["query"] == "dated query"
+    assert isinstance(saved["created_at"], datetime) and saved["created_at"].tzinfo is not None
+    assert body["created_at"] == saved["created_at"].isoformat()

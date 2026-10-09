@@ -88,7 +88,7 @@ Copy `.env.example` to `.env` and fill in:
 |---|---|---|
 | `GROQ_API_KEY` | ✅ | LLM calls ([console.groq.com](https://console.groq.com)) |
 | `TAVILY_API_KEY` | ✅ | Web search ([tavily.com](https://tavily.com)) |
-| `DATABASE_URL` | optional | Postgres URL to keep a history of runs; the table is created automatically |
+| `DATABASE_URL` | optional | Postgres URL to keep a history of reports (query, report, facts, grade and creation date); the table is created automatically. A `localhost` URL only works on your own machine — deployed apps need a hosted database |
 | `GROQ_FAST_MODEL` / `GROQ_SMART_MODEL` | optional | Override the Groq models (defaults: `openai/gpt-oss-20b` / `openai/gpt-oss-120b`) |
 | `ALLOWED_ORIGINS` | optional | Only if `index.html` is hosted on a different domain than the API |
 | `RATE_LIMIT_RUNS` / `RATE_LIMIT_WINDOW_SECONDS` | optional | Per-visitor rate limit (default 5 runs / 10 min) |
@@ -123,8 +123,9 @@ pytest
 | `GET` | `/` | Web interface |
 | `POST` | `/research` | Run the pipeline, return the final report as JSON |
 | `POST` | `/research/stream` | Server-Sent Events: one event per agent step; the final `done` event carries the report |
-| `GET` | `/history` | Last 20 runs (when `DATABASE_URL` is set) |
-| `GET` | `/health` | Health check |
+| `GET` | `/history` | Last 20 saved reports with their dates (when `DATABASE_URL` is set) |
+| `GET` | `/history/{id}` | One saved report, with its creation date |
+| `GET` | `/health` | Health check, including whether the database is reachable |
 
 ---
 

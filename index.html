@@ -796,9 +796,14 @@
   function renderReport(data) {
     lastReport = data.draft || '';
     const score = data.score ? ` · ${data.score}/10` : '';
+    const date  = data.created_at
+      ? new Date(data.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+      : '—';
+    const saved = data.saved ? ` · saved #${data.id}` : '';
     document.getElementById('outputArea').innerHTML = `
       <div class="report-wrap">
         <div class="report-meta">
+          <div class="report-meta-item">Date <span class="report-meta-val">${escapeHtml(date + saved)}</span></div>
           <div class="report-meta-item">Facts <span class="report-meta-val">${data.facts?.length ?? '—'}</span></div>
           <div class="report-meta-item">Revisions <span class="report-meta-val">${data.revision ?? '—'}</span></div>
           <div class="report-meta-item">Grade <span class="report-meta-val">${escapeHtml(data.grade || '—')}${score}</span></div>
