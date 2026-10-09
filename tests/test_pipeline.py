@@ -186,3 +186,19 @@ def test_report_is_saved_with_its_date(offline, monkeypatch):
     assert saved["query"] == "dated query"
     assert isinstance(saved["created_at"], datetime) and saved["created_at"].tzinfo is not None
     assert body["created_at"] == saved["created_at"].isoformat()
+
+
+def test_cors_allows_github_pages_only(monkeypatch):
+    from fastapi.testclient import TestClient
+    import main
+
+    monkeypatch.setenv("DATABASE_URL", "")
+
+    preflight = {"Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type"}
+    with TestClient(main.app) as client:
+        ok = client.options("/research/stream", headers={**preflight, "Origin": "https://dounia4112.github.io"})
+        bad = client.options("/research/stream", headers={**preflight, "Origin": "https://evil.example"})
+
+    assert ok.status_code == 200
+    assert ok.headers["access-control-allow-origin"] == "https://dounia4112.github.io"
+    assert "access-control-allow-origin" not in bad.headers

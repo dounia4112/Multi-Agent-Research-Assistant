@@ -45,8 +45,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Multi-Agent Research Assistant", lifespan=lifespan)
 
-# Only needed when index.html is hosted on a different domain than the API
-allowed_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+# Sites that host index.html on another domain than the API (e.g. the GitHub Pages copy).
+# An origin is scheme + host only, without the repo path.
+DEFAULT_ALLOWED_ORIGINS = "https://dounia4112.github.io"
+allowed_origins = [o.strip().rstrip("/")
+                   for o in os.environ.get("ALLOWED_ORIGINS", DEFAULT_ALLOWED_ORIGINS).split(",")
+                   if o.strip()]
 if allowed_origins:
     app.add_middleware(
         CORSMiddleware,

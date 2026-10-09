@@ -679,10 +679,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script>
-  // Leave empty when FastAPI serves this page (same origin).
-  // If you host this file elsewhere (e.g. GitHub Pages), set it to your API URL,
-  // e.g. 'https://your-api.onrender.com', and add that page's origin to ALLOWED_ORIGINS on the API.
-  const API = ''.replace(/\/+$/, '');
+  // When FastAPI serves this page (Render, localhost) the API is on the same origin.
+  // Static hosts like GitHub Pages can't run the API, so they call the Render deployment,
+  // which must list this page's origin in ALLOWED_ORIGINS.
+  const HOSTED_API = 'https://multi-agent-research-assistant-7biy.onrender.com';
+  const isStaticHost = location.hostname.endsWith('.github.io') || location.protocol === 'file:';
+  const API = isStaticHost ? HOSTED_API : '';
 
   const AGENTS = [
     { key: 'planner',      label: 'Planner',      sub: 'Query decomposition' },
