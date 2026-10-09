@@ -4,8 +4,13 @@
 
 ## 📸 Live Demo
 
-🔗 **Web app (FastAPI + custom UI):** https://multi-agent-research-assistant-7biy.onrender.com/
-🔗 **Streamlit version:** https://multi-agent-research-assistant-bnmn7379dpzcaq8fdi5d3q.streamlit.app/
+| Version | Link | Hosting |
+|---|---|---|
+| 🌐 **Web app** (custom UI + live agent progress) | [dounia4112.github.io/Multi-Agent-Research-Assistant](https://dounia4112.github.io/Multi-Agent-Research-Assistant/) | GitHub Pages → API on Render |
+| ⚡ **Web app + REST API** | [multi-agent-research-assistant-7biy.onrender.com](https://multi-agent-research-assistant-7biy.onrender.com/) · [API docs](https://multi-agent-research-assistant-7biy.onrender.com/docs) | Render |
+| 📊 **Streamlit version** | [Open the Streamlit app](https://multi-agent-research-assistant-bnmn7379dpzcaq8fdi5d3q.streamlit.app/) | Streamlit Community Cloud |
+
+Every report is stored with its creation date in a Postgres database hosted on [Neon](https://neon.tech).
 
 > Hosted on free tiers: the first request after a period of inactivity can take up to a minute while the server wakes up.
 
@@ -90,7 +95,7 @@ Copy `.env.example` to `.env` and fill in:
 | `TAVILY_API_KEY` | ✅ | Web search ([tavily.com](https://tavily.com)) |
 | `DATABASE_URL` | optional | Postgres URL to keep a history of reports (query, report, facts, grade and creation date); the table is created automatically. A `localhost` URL only works on your own machine — deployed apps need a hosted database |
 | `GROQ_FAST_MODEL` / `GROQ_SMART_MODEL` | optional | Override the Groq models (defaults: `openai/gpt-oss-20b` / `openai/gpt-oss-120b`) |
-| `ALLOWED_ORIGINS` | optional | Only if `index.html` is hosted on a different domain than the API |
+| `ALLOWED_ORIGINS` | optional | Sites allowed to call the API from another domain (comma-separated). Defaults to `https://dounia4112.github.io` |
 | `RATE_LIMIT_RUNS` / `RATE_LIMIT_WINDOW_SECONDS` | optional | Per-visitor rate limit (default 5 runs / 10 min) |
 
 ### 3. Run
@@ -135,6 +140,9 @@ pytest
 1. On Render, choose **New → Blueprint** and select this repository.
 2. Set `GROQ_API_KEY`, `TAVILY_API_KEY` and (optionally) `DATABASE_URL` when prompted. A free Postgres from [Neon](https://neon.tech) or [Supabase](https://supabase.com) works.
 3. Render runs `uvicorn main:app --host 0.0.0.0 --port $PORT`; the API serves the web page itself, so there is nothing else to deploy.
+   If you create the service manually instead of from the blueprint, use exactly this start command: the port must be `$PORT`, the variable Render provides.
+
+**Web page on GitHub Pages** (optional) — in the repository's **Settings → Pages**, deploy from the `main` branch root. When opened from `*.github.io`, `index.html` calls the Render API automatically; that site's origin must be listed in `ALLOWED_ORIGINS` (the default already allows `https://dounia4112.github.io`).
 
 **Streamlit Community Cloud:**
 1. New app → this repository → main file `frontend/streamlit.py`.
