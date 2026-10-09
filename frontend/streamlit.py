@@ -6,10 +6,43 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from database.db import save_run
+from database import db
 from graph import build_graph, run_pipeline
 
 st.set_page_config(page_title="Multi-Agent Research Assistant", page_icon="🔬", layout="wide")
+
+SECRET_KEYS = ["GROQ_API_KEY", "TAVILY_API_KEY", "DATABASE_URL", "GROQ_FAST_MODEL", "GROQ_SMART_MODEL"]
+
+
+def load_secrets_into_env():
+    """The shared code reads os.environ. Streamlit Cloud usually exports top-level secrets
+    as env vars, but copy them explicitly so a running app never misses one."""
+    try:
+        for key in SECRET_KEYS:
+            if not os.environ.get(key) and key in st.secrets:
+                os.environ[key] = str(st.secrets[key]).strip()
+    except Exception:
+        pass   # no secrets file (e.g. running locally with a .env)
+
+
+def short_error(e: Exception) -> str:
+    first_line = str(e).strip().splitlines()[0] if str(e).strip() else ""
+    return f"{type(e).__name__}: {first_line}" if first_line else type(e).__name__
+
+
+@st.cache_resource(ttl=600)   # re-check every 10 min, so a temporary outage doesn't stick
+def database_status() -> tuple[bool, str]:
+    """Create the table on first use (Streamlit doesn't run the API's startup hook)."""
+    if not db.is_enabled():
+        return False, "DATABASE_URL is not set, so reports are not saved."
+    try:
+        db.init_db()
+        return True, "Reports are saved to the database."
+    except Exception as e:
+        return False, f"Database unreachable, reports are not saved ({short_error(e)})."
+
+
+load_secrets_into_env()
 
 st.markdown("""
 <style>
@@ -88,6 +121,9 @@ with st.form("query_form"):
     )
     run = st.form_submit_button("🚀 Research", type="primary")
 
+db_ok, db_message = database_status()
+st.caption(("🟢 " if db_ok else "⚪ ") + db_message)
+
 if run and len(query.strip()) < 3:
     st.warning("Please enter a research question.")
 elif run:
@@ -134,19 +170,29 @@ elif run:
         st.stop()
 
     created_at = datetime.now(timezone.utc)
-    run_id = save_run(
-        query=final["query"],
-        report=final["draft"],
-        facts=final["synthesized_facts"],
-        grade=final["grade"],
-        revision=final["revision"],
-        created_at=created_at,
-    )
+    run_id, save_error = None, None
+    db_ok, db_message = database_status()
+    if db_ok:
+        try:
+            run_id = db.insert_run(
+                query=final["query"],
+                report=final["draft"],
+                facts=final["synthesized_facts"],
+                grade=final["grade"],
+                revision=final["revision"],
+                created_at=created_at,
+            )
+        except Exception as e:
+            save_error = short_error(e)
 
     progress_bar.progress(1.0)
     with report_box.container():
         saved = f" · saved as report #{run_id}" if run_id else ""
         st.caption(f"🗓️ Generated {created_at:%d %b %Y, %H:%M} UTC{saved}")
+        if save_error:
+            st.warning(f"The report could not be saved to the database ({save_error}).")
+        elif not db_ok:
+            st.info(db_message)
         st.markdown(final["draft"])
 
     m1, m2, m3 = st.columns(3)

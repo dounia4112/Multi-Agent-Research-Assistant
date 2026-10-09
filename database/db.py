@@ -57,21 +57,23 @@ def init_db():
         cur.execute(MIGRATE_CREATED_AT_SQL)
 
 
-def save_run(query, report, facts, grade, revision, created_at: datetime) -> int | None:
-    """Store a finished run and return its id.
+def insert_run(query, report, facts, grade, revision, created_at: datetime) -> int:
+    """Store a finished run and return its id. Raises on any database error."""
+    with transaction() as cur:
+        cur.execute("""
+            INSERT INTO research_runs (query, report, facts, grade, revision, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (query, report, json.dumps(facts), grade, revision, created_at))
+        return cur.fetchone()[0]
 
-    Never raises: a DB outage must not lose the user's report.
-    """
+
+def save_run(query, report, facts, grade, revision, created_at: datetime) -> int | None:
+    """Like insert_run, but never raises: a DB outage must not lose the user's report."""
     if not is_enabled():
         return None
     try:
-        with transaction() as cur:
-            cur.execute("""
-                INSERT INTO research_runs (query, report, facts, grade, revision, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING id
-            """, (query, report, json.dumps(facts), grade, revision, created_at))
-            return cur.fetchone()[0]
+        return insert_run(query, report, facts, grade, revision, created_at)
     except Exception:
         logger.exception("Could not save research run")
         return None
