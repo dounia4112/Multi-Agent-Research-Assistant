@@ -3,678 +3,672 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Research Assistant</title>
+<title>The Research Desk</title>
+<meta name="description" content="Five AI agents plan, report, fact-check, write and edit a dated research report.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%231a1714'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='20' font-style='italic' text-anchor='middle' fill='%23f3efe6'%3ER%3C/text%3E%3Crect x='6' y='26' width='20' height='2' fill='%23d2401e'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+  /* ───────────── Tokens ───────────── */
   :root {
-    --bg:        #0a0a08;
-    --surface:   #111110;
-    --border:    #1e1e1c;
-    /* --border2:   #2a2a28; */
-    --border2:   #5b5b51;
-    --text:      #e8e6e0;
-    /* --muted:     #6b6960; */
-    --muted:     #9a9787;
-    --accent:    #c8b87a;
-    --accent2:   #7a9e8a;
-    --danger:    #c47a6a;
-    --mono:      'JetBrains Mono', monospace;
-    --serif:     'Playfair Display', Georgia, serif;
-    --sans:      'DM Sans', sans-serif;
+    --paper:      #f3efe6;
+    --paper-2:    #ebe5d8;
+    --paper-3:    #e2dac9;
+    --ink:        #1a1714;
+    --ink-2:      #4a443c;
+    --muted:      #7d7566;
+    --rule:       #cdc4b1;
+    --rule-soft:  #ddd5c4;
+    --accent:     #d2401e;   /* the editor's red pen */
+    --accent-txt: #b3351a;   /* darker for small text contrast */
+    --accent-bg:  rgba(210, 64, 30, 0.08);
+    --ok:         #2f6b4f;
+    --grain-opacity: 0.05;
+
+    --display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+    --serif:   'Newsreader', 'Iowan Old Style', Georgia, serif;
+    --mono:    'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+    --page-max: 1240px;
+    --gutter: 32px;
+    color-scheme: light;
   }
 
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #14120f;
+      --paper-2:    #1c1915;
+      --paper-3:    #26221c;
+      --ink:        #ede6d6;
+      --ink-2:      #c3baa7;
+      --muted:      #8e8573;
+      --rule:       #3b352c;
+      --rule-soft:  #2c2822;
+      --accent:     #ff6b42;
+      --accent-txt: #ff8a66;
+      --accent-bg:  rgba(255, 107, 66, 0.10);
+      --ok:         #7cc4a0;
+      --grain-opacity: 0.08;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #14120f;
+    --paper-2:    #1c1915;
+    --paper-3:    #26221c;
+    --ink:        #ede6d6;
+    --ink-2:      #c3baa7;
+    --muted:      #8e8573;
+    --rule:       #3b352c;
+    --rule-soft:  #2c2822;
+    --accent:     #ff6b42;
+    --accent-txt: #ff8a66;
+    --accent-bg:  rgba(255, 107, 66, 0.10);
+    --ok:         #7cc4a0;
+    --grain-opacity: 0.08;
+    color-scheme: dark;
+  }
+
+  /* ───────────── Base ───────────── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html { font-size: 15px; }
-
+  html { font-size: 16px; -webkit-text-size-adjust: 100%; }
   body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    line-height: 1.55;
     min-height: 100vh;
-    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
-  }
-
-  /* ── Scrollbar ── */
-  ::-webkit-scrollbar { width: 3px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-  /* ── Layout ── */
-  .shell {
-    display: grid;
-    grid-template-columns: 260px 1fr;
-    grid-template-rows: auto 1fr;
-    min-height: 100vh;
-  }
-
-  /* ── Header ── */
-  header {
-    grid-column: 1 / -1;
-    border-bottom: 1px solid var(--border);
-    padding: 0 32px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 56px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: var(--bg);
-  }
-
-  .logo {
-    font-family: var(--serif);
-    font-size: 1.15rem;
-    font-weight: 400;
-    letter-spacing: 0.01em;
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .logo-dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-    animation: breathe 3s ease-in-out infinite;
-  }
-
-  @keyframes breathe {
-    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--accent); }
-    50%       { opacity: 0.5; box-shadow: 0 0 3px var(--accent); }
-  }
-
-  .header-meta {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--muted);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-  }
-
-  .status-pill {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 10px;
-    border: 1px solid var(--border2);
-    border-radius: 20px;
-    font-size: 0.62rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--muted);
-    transition: all 0.3s;
-  }
-  .status-pill.active {
-    border-color: var(--accent2);
-    color: var(--accent2);
-  }
-  .status-pill.active .pill-dot { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
-  .pill-dot {
-    width: 5px; height: 5px;
-    border-radius: 50%;
-    background: var(--border2);
-    transition: all 0.3s;
-  }
-
-  /* ── Sidebar ── */
-  aside {
-    border-right: 1px solid var(--border);
-    padding: 24px 0;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .sidebar-section {
-    padding: 0 20px;
-    margin-bottom: 28px;
-  }
-
-  .sidebar-label {
-    font-family: var(--mono);
-    font-size: 0.58rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 12px;
-  }
-
-  /* Agent pipeline */
-  .agent-list { display: flex; flex-direction: column; gap: 4px; }
-
-  .agent-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 6px;
-    border: 1px solid transparent;
-    transition: all 0.25s ease;
-    cursor: default;
     position: relative;
-    overflow: hidden;
   }
-
-  .agent-item::before {
+  /* Newsprint grain */
+  body::before {
     content: '';
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 2px;
-    background: var(--accent);
-    transform: scaleY(0);
-    transition: transform 0.3s ease;
-    transform-origin: bottom;
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
+  .page { position: relative; z-index: 1; max-width: var(--page-max); margin: 0 auto; padding: 0 var(--gutter) 80px; }
 
-  .agent-item.running {
-    background: rgba(200,184,122,0.04);
-    border-color: rgba(200,184,122,0.15);
-  }
-  .agent-item.running::before { transform: scaleY(1); }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-  .agent-item.done {
-    background: rgba(122,158,138,0.05);
-    border-color: rgba(122,158,138,0.15);
-  }
-  .agent-item.done::before {
-    background: var(--accent2);
-    transform: scaleY(1);
-  }
-
-  .agent-idx {
-    font-family: var(--mono);
-    font-size: 0.58rem;
-    color: var(--muted);
-    width: 14px;
-    text-align: center;
-    flex-shrink: 0;
-  }
-
-  .agent-info { flex: 1; min-width: 0; }
-
-  .agent-name {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--muted);
-    transition: color 0.25s;
-    letter-spacing: 0.02em;
-  }
-  .agent-item.running .agent-name { color: var(--accent); }
-  .agent-item.done    .agent-name { color: var(--accent2); }
-
-  .agent-msg {
-    font-family: var(--mono);
-    font-size: 0.58rem;
-    color: var(--muted);
-    margin-top: 1px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-  .agent-item.running .agent-msg,
-  .agent-item.done    .agent-msg { opacity: 1; }
-
-  .agent-check {
-    font-size: 0.65rem;
-    color: var(--accent2);
-    opacity: 0;
-    transition: opacity 0.3s;
-    flex-shrink: 0;
-  }
-  .agent-item.done .agent-check { opacity: 1; }
-
-  /* running spinner */
-  .spinner {
-    width: 10px; height: 10px;
-    border: 1.5px solid rgba(200,184,122,0.2);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    flex-shrink: 0;
-    display: none;
-  }
-  .agent-item.running .spinner { display: block; }
-  .agent-item.done    .spinner { display: none; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* progress bar */
-  .progress-wrap {
-    padding: 0 20px;
-    margin-bottom: 24px;
-  }
-  .progress-track {
-    height: 1px;
-    background: var(--border);
-    border-radius: 1px;
-    overflow: hidden;
-    margin-bottom: 6px;
-  }
-  .progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent), var(--accent2));
-    border-radius: 1px;
-    width: 0%;
-    transition: width 0.6s ease;
-  }
-  .progress-label {
-    display: flex;
-    justify-content: space-between;
-    font-family: var(--mono);
-    font-size: 0.58rem;
-    color: var(--muted);
-  }
-
-  /* facts list */
-  .facts-list { display: flex; flex-direction: column; gap: 6px; }
-  .fact-item {
-    display: flex;
-    gap: 8px;
-    font-size: 0.7rem;
-    color: var(--muted);
-    line-height: 1.5;
-    animation: fadeSlide 0.3s ease both;
-  }
-  .fact-num {
-    font-family: var(--mono);
-    font-size: 0.58rem;
-    color: var(--border2);
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  @keyframes fadeSlide {
-    from { opacity: 0; transform: translateX(-6px); }
-    to   { opacity: 1; transform: none; }
-  }
-
-  /* ── Main content ── */
-  main {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  /* Input area */
-  .input-area {
-    padding: 28px 36px 24px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .query-label {
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 10px;
-  }
-
-  .query-wrap {
-    position: relative;
-    display: flex;
-    align-items: flex-start;
-    gap: 0;
-    border: 1px solid var(--border2);
-    border-radius: 8px;
-    background: var(--surface);
-    transition: border-color 0.2s;
-  }
-  .query-wrap:focus-within { border-color: rgba(200,184,122,0.35); }
-
-  .query-prompt {
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    color: var(--accent);
-    padding: 14px 0 14px 16px;
-    flex-shrink: 0;
-    user-select: none;
-    line-height: 1.6;
-  }
-
-  textarea {
-    flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 0.9rem;
-    font-weight: 300;
-    padding: 13px 16px;
-    resize: none;
-    line-height: 1.6;
-    min-height: 52px;
-    max-height: 160px;
-  }
-  textarea::placeholder { color: var(--muted); font-style: italic; }
-
-  .run-btn {
-    align-self: flex-end;
-    margin: 10px 10px 10px 0;
-    padding: 7px 18px;
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: 5px;
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-  .run-btn:hover:not(:disabled) {
-    background: #d4c98a;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(200,184,122,0.3);
-  }
-  .run-btn:disabled {
-    background: var(--border2);
-    color: var(--muted);
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
-
-  /* Output area */
-  .output-area {
-    flex: 1;
-    overflow-y: auto;
-    padding: 32px 36px;
-  }
-
-  /* Empty state */
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    min-height: 320px;
-    gap: 16px;
-    text-align: center;
-    opacity: 0.4;
-  }
-
-  .empty-glyph {
-    font-family: var(--serif);
-    font-size: 4rem;
-    font-style: italic;
-    color: var(--muted);
-    line-height: 1;
-    margin-bottom: 4px;
-  }
-
-  .empty-title {
-    font-family: var(--serif);
-    font-size: 1.1rem;
-    color: var(--muted);
-    font-weight: 400;
-  }
-
-  .empty-sub {
-    font-size: 0.75rem;
-    color: var(--muted);
-    max-width: 280px;
-    line-height: 1.7;
-  }
-
-  /* Report */
-  .report-wrap { animation: fadeSlide 0.5s ease; }
-
-  .report-meta {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 28px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-  }
-
-  .report-meta-item {
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    color: var(--muted);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .report-meta-val {
-    color: var(--accent2);
-    font-weight: 500;
-  }
-
-  .report-body h1 {
-    font-family: var(--serif);
-    font-size: 1.6rem;
-    font-weight: 400;
-    color: var(--text);
-    margin-bottom: 20px;
-    line-height: 1.3;
-  }
-  .report-body h2 {
-    font-family: var(--serif);
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--text);
-    margin: 28px 0 10px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--border);
-  }
-  .report-body p {
-    font-size: 0.875rem;
-    color: #c0bdb6;
-    line-height: 1.85;
-    margin-bottom: 12px;
-    font-weight: 300;
-  }
-  .report-body li {
-    font-size: 0.875rem;
-    color: #c0bdb6;
-    line-height: 1.75;
-    margin-bottom: 6px;
-    font-weight: 300;
-    padding-left: 4px;
-  }
-  .report-body ul { list-style: none; margin: 0 0 12px 0; padding: 0; }
-  .report-body ul li::before {
-    content: '—';
-    color: var(--accent);
-    margin-right: 10px;
-    font-family: var(--mono);
-    font-size: 0.7rem;
-  }
-  .report-body ol { margin: 0 0 12px 1.4em; padding: 0; }
-  .report-body ol li::marker { color: var(--accent); font-family: var(--mono); font-size: 0.75rem; }
-  .report-body h3 {
-    font-family: var(--serif);
-    font-size: 0.95rem;
-    font-weight: 600;
-    margin: 20px 0 8px;
-  }
-  .report-body strong { color: var(--text); font-weight: 500; }
-  .report-body a { color: var(--accent2); text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
-  .report-body code {
-    font-family: var(--mono);
-    font-size: 0.8em;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 1px 4px;
-  }
-  .report-body blockquote {
-    border-left: 2px solid var(--accent);
-    padding-left: 14px;
-    margin: 0 0 12px;
-  }
-
-  /* Log stream */
-  .log-stream {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--muted);
-    line-height: 2;
-    margin-bottom: 24px;
-  }
-  .log-line {
-    display: flex;
-    gap: 12px;
-    animation: fadeSlide 0.25s ease both;
-  }
-  .log-time { color: var(--border2); flex-shrink: 0; }
-  .log-agent { color: var(--accent); width: 90px; flex-shrink: 0; }
-  .log-msg { color: var(--muted); }
-  .log-line.done .log-agent { color: var(--accent2); }
-
-  /* Error */
-  .error-box {
-    padding: 12px 16px;
-    border: 1px solid rgba(196,122,106,0.3);
-    background: rgba(196,122,106,0.05);
-    border-radius: 6px;
+  .kicker {
     font-family: var(--mono);
     font-size: 0.68rem;
-    color: var(--danger);
-    line-height: 1.6;
-    margin-bottom: 20px;
-    animation: fadeSlide 0.3s ease;
-  }
-
-  /* Cursor blink */
-  .cursor {
-    display: inline-block;
-    width: 7px; height: 13px;
-    background: var(--accent);
-    margin-left: 3px;
-    vertical-align: middle;
-    animation: blink 1s step-end infinite;
-  }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
-  /* Copy button */
-  .copy-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 20px;
-    padding: 6px 14px;
-    border: 1px solid var(--border2);
-    border-radius: 5px;
-    background: transparent;
-    color: var(--muted);
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .copy-btn:hover {
-    border-color: var(--accent2);
-    color: var(--accent2);
+    color: var(--muted);
   }
 
-  /* ── Phone layout: stack the sidebar above the main column ── */
-  @media (max-width: 760px) {
-    .shell { grid-template-columns: 1fr; }
-    header { padding: 0 16px; }
-    .header-meta > span:first-child { display: none; }
-    aside { border-right: none; border-bottom: 1px solid var(--border); padding: 16px 0 0; }
-    .progress-wrap, .sidebar-section { padding: 0 16px; }
-    .input-area { padding: 20px 16px; }
-    .output-area { padding: 24px 16px; }
-    .log-agent { width: auto; }
-    .log-time { display: none; }
+  /* ───────────── Masthead ───────────── */
+  .masthead { padding-top: 22px; }
+  .masthead-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding-bottom: 14px;
+  }
+  .masthead-top .kicker b { color: var(--ink); font-weight: 500; }
+  .masthead-tools { display: flex; align-items: center; gap: 10px; }
+
+  .status {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 5px 11px;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .status[data-kind="open"] .status-dot    { background: var(--ok); }
+  .status[data-kind="running"]             { border-color: var(--accent); color: var(--accent-txt); }
+  .status[data-kind="running"] .status-dot { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  .status[data-kind="filed"] .status-dot   { background: var(--ink); }
+  .status[data-kind="error"]               { border-color: var(--accent); color: var(--accent-txt); }
+  .status[data-kind="error"] .status-dot   { background: var(--accent); }
+  .status[data-kind="opening"] .status-dot { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+
+  .theme-toggle {
+    width: 32px; height: 32px;
+    border: 1px solid var(--rule); border-radius: 50%;
+    display: grid; place-items: center;
+    color: var(--ink-2);
+  }
+  .theme-toggle:hover { border-color: var(--ink); color: var(--ink); }
+  .theme-toggle svg { width: 15px; height: 15px; }
+
+  .nameplate {
+    border-top: 3px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 10px 0 12px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: end;
+    gap: 16px;
+  }
+  .nameplate h1 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-variation-settings: 'opsz' 144, 'SOFT' 30;
+    font-size: clamp(2.6rem, 7vw, 5.4rem);
+    line-height: 0.92;
+    letter-spacing: -0.035em;
+    text-align: center;
+  }
+  .nameplate h1 em { font-style: italic; font-weight: 400; color: var(--accent); letter-spacing: -0.02em; }
+  .nameplate .side { font-family: var(--serif); font-style: italic; font-size: 0.95rem; color: var(--ink-2); line-height: 1.35; }
+  .nameplate .side.right { text-align: right; }
+  .underline-rule { height: 4px; border-bottom: 1px solid var(--ink); }
+
+  .ticker {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .ticker span::before { content: '◆'; color: var(--accent); margin-right: 8px; font-size: 0.55rem; vertical-align: 1px; }
+
+  /* ───────────── Composer ───────────── */
+  .composer {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 28px;
+    padding: 40px 0 34px;
+    border-bottom: 1px solid var(--ink);
+  }
+  .composer-label { padding-top: 10px; }
+  .composer-label .kicker { color: var(--accent-txt); display: block; margin-bottom: 8px; }
+  .composer-label p { font-style: italic; color: var(--ink-2); font-size: 0.95rem; line-height: 1.4; }
+
+  .query-field { position: relative; }
+  .query-field textarea {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid var(--ink);
+    color: var(--ink);
+    font-family: var(--display);
+    font-variation-settings: 'opsz' 96;
+    font-weight: 500;
+    font-size: clamp(1.6rem, 3.4vw, 2.6rem);
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    padding: 6px 0 14px;
+    resize: none;
+    outline: none;
+    min-height: 1.3em;
+    overflow: hidden;
+  }
+  .query-field textarea::placeholder { color: var(--muted); font-style: italic; font-weight: 300; opacity: 0.85; }
+  .query-field textarea:focus { border-bottom-color: var(--accent); }
+  .query-field.shake { animation: shake 0.35s; }
+  @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+
+  .composer-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .leads { font-size: 0.98rem; color: var(--ink-2); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 0; }
+  .leads .kicker { margin-right: 10px; }
+  .lead-chip {
+    text-align: left;
+    font-family: var(--serif); font-style: italic; font-size: 0.98rem;
+    color: var(--ink);
+    text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px;
+    padding: 2px 0;
+  }
+  .lead-chip:hover { text-decoration-color: var(--accent); color: var(--accent-txt); }
+  .lead-sep { color: var(--rule); margin: 0 10px; }
+
+  .composer-actions { display: flex; align-items: center; gap: 18px; margin-left: auto; }
+  .counter { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); }
+  .counter.over { color: var(--accent-txt); }
+  .file-btn {
+    display: inline-flex; align-items: center; gap: 12px;
+    background: var(--ink); color: var(--paper);
+    font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 14px 22px;
+    border-radius: 2px;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .file-btn:hover:not(:disabled) { background: var(--accent); transform: translateY(-1px); }
+  .file-btn:disabled { opacity: 0.45; cursor: progress; }
+  .file-btn .arrow { transition: transform 0.2s; }
+  .file-btn:hover:not(:disabled) .arrow { transform: translateX(4px); }
+  .hint { font-size: 0.85rem; color: var(--accent-txt); font-style: italic; margin-top: 8px; min-height: 1.2em; }
+
+  /* ───────────── Newsroom pipeline ───────────── */
+  .newsroom { padding: 30px 0 8px; }
+  .section-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+    margin-bottom: 14px;
+  }
+  .section-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 1.05rem;
+    font-variation-settings: 'opsz' 24;
+    letter-spacing: -0.01em;
+  }
+  .progress-meta { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); }
+
+  .stations-wrap { position: relative; border-top: 1px solid var(--ink); }
+  .stations {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+  }
+  .progress-line {
+    position: absolute; top: -2px; left: 0; height: 3px;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.6s cubic-bezier(.2,.7,.2,1);
+  }
+  .station {
+    position: relative;
+    padding: 18px 16px 20px;
+    border-right: 1px solid var(--rule-soft);
+    min-height: 168px;
+    transition: background 0.3s;
+  }
+  .station:last-child { border-right: 0; }
+  .station-num {
+    font-family: var(--display); font-weight: 300; font-style: italic;
+    font-size: 2.3rem; line-height: 1;
+    font-variation-settings: 'opsz' 144;
+    color: var(--rule);
+    transition: color 0.3s;
+  }
+  .station-role {
+    font-family: var(--display); font-weight: 600; font-size: 1.08rem;
+    font-variation-settings: 'opsz' 36;
+    margin-top: 10px; letter-spacing: -0.01em;
+  }
+  .station-agent { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+  .station-msg {
+    font-size: 0.88rem; color: var(--ink-2); margin-top: 10px; line-height: 1.4;
+    font-style: italic;
+  }
+
+  .station.active { background: var(--paper-2); }
+  .station.active .station-num { color: var(--accent); }
+  .station.active .station-msg::after {
+    content: '▍'; font-style: normal; color: var(--accent); margin-left: 2px;
+    animation: caret 0.9s steps(1) infinite;
+  }
+  @keyframes caret { 50% { opacity: 0; } }
+  .station.done .station-num, .station.sent-back .station-num { color: var(--ink); }
+
+  .stamp {
+    position: absolute; top: 16px; right: 12px;
+    font-family: var(--mono); font-weight: 500; font-size: 0.62rem; letter-spacing: 0.16em;
+    padding: 3px 7px 2px;
+    border: 1.5px solid currentColor;
+    border-radius: 3px;
+    transform: rotate(-8deg) scale(0.6);
+    opacity: 0;
+    transition: opacity 0.25s, transform 0.35s cubic-bezier(.3,1.6,.5,1);
+    pointer-events: none;
+  }
+  .station.done .stamp, .station.sent-back .stamp { opacity: 1; transform: rotate(-8deg) scale(1); }
+  .station.done .stamp      { color: var(--ink-2); }
+  .station.sent-back .stamp { color: var(--accent); }
+
+  /* ───────────── Edition: main + rail ───────────── */
+  .edition {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 48px;
+    padding-top: 34px;
+    border-top: 1px solid var(--ink);
+    margin-top: 18px;
+  }
+  .rail { border-left: 1px solid var(--rule); padding-left: 28px; }
+  .rail-section + .rail-section { margin-top: 34px; }
+  .rail h3 {
+    font-family: var(--mono); font-weight: 500; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink);
+    padding-bottom: 8px; margin-bottom: 12px;
+    border-bottom: 2px solid var(--ink);
+    display: flex; justify-content: space-between;
+  }
+  .rail h3 small { color: var(--muted); font-size: inherit; font-weight: 400; }
+  .rail-empty { font-style: italic; color: var(--muted); font-size: 0.92rem; }
+
+  .lead-list { list-style: none; counter-reset: lead; }
+  .lead-list li {
+    counter-increment: lead;
+    display: grid; grid-template-columns: 22px 1fr; gap: 8px;
+    font-size: 0.92rem; line-height: 1.35; color: var(--ink-2);
+    padding: 7px 0;
+    border-bottom: 1px dotted var(--rule);
+    animation: rise 0.35s ease both;
+  }
+  .lead-list li::before {
+    content: counter(lead, lower-roman) '.';
+    font-family: var(--display); font-style: italic; color: var(--muted);
+  }
+  .lead-list li.checked { color: var(--ink); }
+  .lead-list li.checked::before { content: '✓'; color: var(--ok); font-style: normal; font-weight: 700; }
+
+  .fact-cards { display: grid; gap: 10px; }
+  .fact-card {
+    background: var(--paper-2);
+    border: 1px solid var(--rule-soft);
+    border-top: 3px solid var(--accent);
+    padding: 10px 12px 11px;
+    font-size: 0.88rem; line-height: 1.4; color: var(--ink-2);
+    animation: rise 0.35s ease both;
+  }
+  .fact-card b { display: block; font-family: var(--mono); font-weight: 500; font-size: 0.62rem; letter-spacing: 0.14em; color: var(--accent-txt); margin-bottom: 3px; }
+  .facts-more { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); padding-top: 4px; }
+
+  .archive-list { list-style: none; }
+  .archive-list button {
+    width: 100%; text-align: left;
+    display: grid; gap: 3px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .archive-list button:hover .archive-q { color: var(--accent-txt); }
+  .archive-date { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+  .archive-q { font-family: var(--display); font-weight: 500; font-size: 1rem; line-height: 1.25; font-variation-settings: 'opsz' 24; transition: color 0.2s; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ───────────── Front page placeholder ───────────── */
+  .blank-front { display: grid; gap: 14px; padding-bottom: 20px; }
+  .blank-front .kicker { color: var(--accent-txt); }
+  .blank-front h2 {
+    font-family: var(--display); font-weight: 400; font-style: italic;
+    font-size: clamp(2rem, 4vw, 3.1rem); line-height: 1.02; letter-spacing: -0.03em;
+    font-variation-settings: 'opsz' 144;
+    max-width: 16ch;
+  }
+  .blank-front p.lede { font-size: 1.12rem; color: var(--ink-2); max-width: 54ch; }
+  .ghost-columns { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 22px; margin-top: 18px; }
+  .ghost-col { display: grid; gap: 9px; align-content: start; }
+  .ghost-col i { display: block; height: 9px; background: var(--paper-3); border-radius: 1px; }
+  .ghost-col i:nth-child(3n) { width: 82%; }
+  .ghost-col i:nth-child(5n) { width: 64%; }
+  .ghost-col i.title { height: 20px; width: 90%; background: var(--rule-soft); margin-bottom: 4px; }
+  .ghost-col i.photo { height: 92px; background: repeating-linear-gradient(135deg, var(--paper-3) 0 6px, transparent 6px 12px); border: 1px solid var(--rule-soft); }
+  .how-it-works { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--rule); }
+  .how-it-works div { font-size: 0.92rem; color: var(--ink-2); line-height: 1.45; }
+  .how-it-works b { display: block; font-family: var(--display); font-size: 1rem; color: var(--ink); margin-bottom: 4px; font-variation-settings: 'opsz' 24; }
+
+  /* ───────────── Wire feed ───────────── */
+  .wire { font-family: var(--mono); font-size: 0.78rem; }
+  .wire-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .wire-head h2 { font-family: var(--display); font-size: 1.6rem; font-weight: 600; font-variation-settings: 'opsz' 72; letter-spacing: -0.02em; }
+  .wire-head .live {
+    font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.16em;
+    color: var(--paper); background: var(--accent); padding: 3px 7px 2px; border-radius: 2px;
+  }
+  .wire-line {
+    display: grid; grid-template-columns: 70px 120px 1fr; gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px dotted var(--rule);
+    color: var(--ink-2);
+    animation: rise 0.25s ease both;
+  }
+  .wire-time { color: var(--muted); }
+  .wire-who { color: var(--accent-txt); text-transform: uppercase; letter-spacing: 0.06em; }
+  .wire-line.system .wire-who { color: var(--muted); }
+
+  /* ───────────── Correction (error) ───────────── */
+  .correction {
+    border: 1px solid var(--accent);
+    background: var(--accent-bg);
+    padding: 14px 16px;
+    margin-bottom: 22px;
+    font-size: 0.98rem;
+    animation: rise 0.3s ease both;
+  }
+  .correction strong { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.16em; color: var(--accent-txt); margin-right: 8px; }
+
+  /* ───────────── Article (the report) ───────────── */
+  .article { animation: rise 0.5s ease both; }
+  .article .kicker { color: var(--accent-txt); }
+  .article-title {
+    font-family: var(--display); font-weight: 700;
+    font-variation-settings: 'opsz' 144, 'SOFT' 20;
+    font-size: clamp(2rem, 4.4vw, 3.4rem);
+    line-height: 1.02; letter-spacing: -0.035em;
+    margin: 10px 0 16px;
+    text-wrap: balance;
+  }
+  .dateline {
+    display: flex; flex-wrap: wrap; gap: 6px 18px;
+    padding: 10px 0;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2);
+  }
+  .dateline b { color: var(--ink); font-weight: 500; }
+  .grade-pass { color: var(--ok) !important; }
+
+  .article-body { margin-top: 26px; font-size: 1.12rem; line-height: 1.7; max-width: 68ch; }
+  .article-body h2 {
+    font-family: var(--mono); font-weight: 500; font-size: 0.74rem; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink);
+    display: flex; align-items: center; gap: 12px;
+    margin: 34px 0 12px;
+  }
+  .article-body h2::after { content: ''; flex: 1; height: 1px; background: var(--rule); }
+  .article-body h2:first-child { margin-top: 0; }
+  .article-body h3 { font-family: var(--display); font-size: 1.2rem; margin: 22px 0 8px; font-variation-settings: 'opsz' 36; }
+  .article-body p { margin-bottom: 14px; color: var(--ink); }
+  /* Drop cap on the opening paragraph (the executive summary) */
+  .article-body > h2:first-child + p::first-letter,
+  .article-body > p:first-child::first-letter {
+    font-family: var(--display); font-weight: 700;
+    font-variation-settings: 'opsz' 144;
+    float: left;
+    font-size: 4.1em; line-height: 0.82;
+    margin: 0.06em 0.09em 0 0;
+    color: var(--accent);
+  }
+  .article-body > h2:first-child + p { font-size: 1.22rem; line-height: 1.6; }
+  .article-body ul, .article-body ol { margin: 0 0 16px; padding-left: 0; list-style: none; }
+  .article-body li { position: relative; padding-left: 26px; margin-bottom: 9px; }
+  .article-body ul > li::before { content: '■'; position: absolute; left: 4px; top: 0.05em; font-size: 0.6em; color: var(--accent); line-height: 2.4; }
+  .article-body ol { counter-reset: item; }
+  .article-body ol > li { counter-increment: item; }
+  .article-body ol > li::before { content: counter(item) '.'; position: absolute; left: 0; font-family: var(--display); font-style: italic; color: var(--accent-txt); }
+  .article-body strong { font-weight: 650; }
+  .article-body a { color: inherit; text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; word-break: break-word; }
+  .article-body a:hover { color: var(--accent-txt); }
+  .article-body blockquote { border-left: 3px solid var(--accent); padding: 4px 0 4px 18px; font-style: italic; color: var(--ink-2); margin: 0 0 16px; }
+  .article-body code { font-family: var(--mono); font-size: 0.85em; background: var(--paper-2); padding: 1px 5px; border-radius: 2px; }
+  .article-body hr { border: 0; border-top: 1px solid var(--rule); margin: 26px 0; }
+  /* References read like footnotes */
+  .article-body h2 + ul:last-child, .article-body h2 + ol:last-child { font-size: 0.92rem; color: var(--ink-2); }
+
+  .article-actions {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin-top: 30px; padding-top: 18px;
+    border-top: 3px double var(--ink);
+  }
+  .ghost-btn {
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 9px 14px;
+    border: 1px solid var(--ink);
+    border-radius: 2px;
+    transition: background 0.2s, color 0.2s;
+  }
+  .ghost-btn:hover { background: var(--ink); color: var(--paper); }
+
+  /* ───────────── Footer ───────────── */
+  .colophon {
+    margin-top: 60px; padding-top: 14px;
+    border-top: 3px double var(--ink);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  }
+  .colophon a { color: inherit; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+
+  /* ───────────── Responsive ───────────── */
+  @media (max-width: 1020px) {
+    .edition { grid-template-columns: 1fr; gap: 36px; }
+    .rail { border-left: 0; padding-left: 0; border-top: 1px solid var(--ink); padding-top: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 30px; }
+    .rail-section + .rail-section { margin-top: 0; }
+  }
+  @media (max-width: 860px) {
+    .stations { grid-template-columns: 1fr; }
+    .station { min-height: 0; border-right: 0; border-bottom: 1px solid var(--rule-soft); display: grid; grid-template-columns: 48px 1fr; column-gap: 12px; padding: 14px 8px; }
+    .station-num { grid-row: span 3; font-size: 1.9rem; }
+    .station-role { margin-top: 0; }
+    .station-msg { margin-top: 4px; }
+    .stamp { top: 14px; }
+    .progress-line { display: none; }
+    .composer { grid-template-columns: 1fr; gap: 12px; padding: 28px 0 26px; }
+    .composer-label { padding-top: 0; }
+    .ghost-columns { grid-template-columns: 1fr 1fr; }
+    .ghost-col:last-child { display: none; }
+    .how-it-works { grid-template-columns: 1fr; gap: 14px; }
+  }
+  @media (max-width: 600px) {
+    :root { --gutter: 16px; }
+    .nameplate { grid-template-columns: 1fr; text-align: center; }
+    .nameplate .side { display: none; }
+    .masthead-top .kicker.date { display: none; }
+    .masthead-tools { margin-left: auto; }
+    .leads { flex-direction: column; align-items: flex-start; gap: 6px; }
+    .lead-sep { display: none; }
+    .composer-row { align-items: stretch; }
+    .composer-actions { width: 100%; justify-content: space-between; }
+    .wire-line { grid-template-columns: 1fr; gap: 2px; }
+    .article-body { font-size: 1.05rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  /* ───────────── Print: just the article ───────────── */
+  @media print {
+    :root { --paper: #fff; --ink: #000; --ink-2: #222; --muted: #555; --rule: #bbb; --accent: #b3351a; --accent-txt: #b3351a; }
+    body::before, .masthead-top, .ticker, .composer, .newsroom, .rail, .article-actions, .colophon { display: none !important; }
+    .edition { display: block; border: 0; padding: 0; margin: 0; }
+    .page { padding: 0; }
+    .nameplate { margin-bottom: 18px; }
+    .article-body { max-width: none; font-size: 11pt; }
   }
 </style>
 </head>
 <body>
+<div class="page">
 
-<div class="shell">
-
-  <!-- Header -->
-  <header>
-    <div class="logo">
-      <div class="logo-dot"></div>
-      Research Assistant
-    </div>
-    <div class="header-meta">
-      <span>LangGraph · Groq · Tavily</span>
-      <div class="status-pill" id="statusPill">
-        <div class="pill-dot"></div>
-        <span id="statusText">Idle</span>
+  <!-- Masthead -->
+  <header class="masthead">
+    <div class="masthead-top">
+      <span class="kicker date" id="todayLine">—</span>
+      <div class="masthead-tools">
+        <span class="status" id="status" data-kind="opening" role="status" aria-live="polite">
+          <span class="status-dot"></span><span id="statusText">Opening the desk</span>
+        </span>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch between day and night edition">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>
+        </button>
       </div>
     </div>
+    <div class="nameplate">
+      <p class="side">Five agents.<br>One question.</p>
+      <h1>The Research <em>Desk</em></h1>
+      <p class="side right">Every report<br>filed and dated.</p>
+    </div>
+    <div class="underline-rule"></div>
+    <nav class="ticker" aria-label="Pipeline">
+      <span>Planner</span><span>Web Searcher</span><span>Synthesizer</span><span>Writer</span><span>Grader</span>
+      <span>LangGraph · Groq · Tavily</span>
+    </nav>
   </header>
 
-  <!-- Sidebar -->
-  <aside>
-    <div class="progress-wrap" id="progressWrap" style="display:none">
-      <div class="progress-track">
-        <div class="progress-fill" id="progressFill"></div>
-      </div>
-      <div class="progress-label">
-        <span>Pipeline</span>
-        <span id="progressPct">0%</span>
-      </div>
+  <!-- Composer -->
+  <section class="composer" aria-labelledby="assignmentLabel">
+    <div class="composer-label">
+      <span class="kicker" id="assignmentLabel">Today's assignment</span>
+      <p>Ask anything worth a front page. The desk researches the live web.</p>
     </div>
+    <form id="queryForm" novalidate>
+      <div class="query-field" id="queryField">
+        <label for="queryInput" class="sr-only">Research question</label>
+        <textarea id="queryInput" rows="1" maxlength="500"
+          placeholder="What should the desk investigate today?"
+          aria-describedby="queryHint"></textarea>
+      </div>
+      <p class="hint" id="queryHint" aria-live="polite"></p>
+      <div class="composer-row">
+        <div class="leads" id="suggestions"><span class="kicker">Or chase a lead</span></div>
+        <div class="composer-actions">
+          <span class="counter" id="counter">0 / 500</span>
+          <button class="file-btn" id="runBtn" type="submit">File the assignment <span class="arrow" aria-hidden="true">→</span></button>
+        </div>
+      </div>
+    </form>
+  </section>
 
-    <div class="sidebar-section">
-      <div class="sidebar-label">Agents</div>
-      <div class="agent-list" id="agentList">
-        <!-- injected by JS -->
-      </div>
+  <!-- Newsroom -->
+  <section class="newsroom" aria-labelledby="newsroomTitle">
+    <div class="section-head">
+      <h2 id="newsroomTitle">In the newsroom</h2>
+      <span class="progress-meta" id="progressMeta">Waiting for an assignment</span>
     </div>
+    <div class="stations-wrap">
+      <div class="progress-line" id="progressLine" aria-hidden="true"></div>
+      <ol class="stations" id="stations"></ol>
+    </div>
+  </section>
 
-    <div class="sidebar-section" id="factsSection" style="display:none">
-      <div class="sidebar-label">Extracted facts</div>
-      <div class="facts-list" id="factsList"></div>
-    </div>
-  </aside>
+  <!-- Edition -->
+  <div class="edition">
+    <main id="main" aria-live="polite"></main>
 
-  <!-- Main -->
-  <main>
-    <div class="input-area">
-      <div class="query-label">Research query</div>
-      <div class="query-wrap">
-        <span class="query-prompt">›</span>
-        <textarea
-          id="queryInput"
-          rows="2"
-          placeholder="What do you want to research? e.g. Impact of LLMs on software engineering jobs in 2025"
-          onkeydown="handleKey(event)"
-        ></textarea>
-        <button class="run-btn" id="runBtn" onclick="runResearch()">Run ⏎</button>
-      </div>
-    </div>
+    <aside class="rail" aria-label="Notes from the field">
+      <section class="rail-section">
+        <h3>Leads <small id="leadCount"></small></h3>
+        <ol class="lead-list" id="leadList"></ol>
+        <p class="rail-empty" id="leadEmpty">The planner's search leads will appear here.</p>
+      </section>
+      <section class="rail-section">
+        <h3>Fact cards <small id="factCount"></small></h3>
+        <div class="fact-cards" id="factCards"></div>
+        <p class="rail-empty" id="factEmpty">Verified facts get pinned here.</p>
+      </section>
+      <section class="rail-section" id="archiveSection" hidden>
+        <h3>From the archive <small id="archiveCount"></small></h3>
+        <ul class="archive-list" id="archiveList"></ul>
+      </section>
+    </aside>
+  </div>
 
-    <div class="output-area" id="outputArea">
-      <div class="empty-state" id="emptyState">
-        <div class="empty-glyph">∂</div>
-        <div class="empty-title">Nothing yet</div>
-        <div class="empty-sub">Enter a research question above and the agents will get to work.</div>
-      </div>
-    </div>
-  </main>
+  <footer class="colophon kicker">
+    <span>Set in Fraunces, Newsreader &amp; IBM Plex Mono</span>
+    <a href="https://github.com/dounia4112/Multi-Agent-Research-Assistant" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a>
+  </footer>
 </div>
+
+<template id="blankFront">
+  <div class="blank-front">
+    <span class="kicker">Tomorrow's edition</span>
+    <h2>The front page is still blank.</h2>
+    <p class="lede">File an assignment above and watch the desk work: leads are planned, reported on the live web, fact-checked, written up, and reviewed by an editor who can send the draft back.</p>
+    <div class="ghost-columns" aria-hidden="true">
+      <div class="ghost-col"><i class="title"></i><i class="photo"></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="ghost-col"><i class="title"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="ghost-col"><i class="title"></i><i></i><i></i><i></i><i class="photo"></i><i></i><i></i></div>
+    </div>
+    <div class="how-it-works">
+      <div><b>Planned, then reported</b>Your question is split into 3–5 focused leads, each searched on the live web.</div>
+      <div><b>Fact-checked and edited</b>Claims are de-duplicated, drafted into a report, and graded. Weak drafts get revised.</div>
+      <div><b>Filed with a date</b>Every finished report is stored with its date and stays in the archive.</div>
+    </div>
+  </div>
+</template>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
@@ -686,192 +680,294 @@
   const isStaticHost = location.hostname.endsWith('.github.io') || location.protocol === 'file:';
   const API = isStaticHost ? HOSTED_API : '';
 
-  const AGENTS = [
-    { key: 'planner',      label: 'Planner',      sub: 'Query decomposition' },
-    { key: 'web_searcher', label: 'Web Searcher',  sub: 'Tavily search'       },
-    { key: 'synthesizer',  label: 'Synthesizer',   sub: 'Fact extraction'     },
-    { key: 'writer',       label: 'Writer',        sub: 'Report drafting'     },
-    { key: 'grader',       label: 'Grader',        sub: 'Quality review'      },
+  const STATIONS = [
+    { key: 'planner',      role: 'Assignment',      agent: 'Planner',      idle: 'Breaks the question into leads' },
+    { key: 'web_searcher', role: 'Field reporting', agent: 'Web Searcher', idle: 'Chases every lead on the web' },
+    { key: 'synthesizer',  role: 'Fact-check',      agent: 'Synthesizer',  idle: 'Keeps only what holds up' },
+    { key: 'writer',       role: 'Drafting',        agent: 'Writer',       idle: 'Files a structured story' },
+    { key: 'grader',       role: "Editor's desk",   agent: 'Grader',       idle: 'Approves or sends it back' },
   ];
-  const isAgent = key => AGENTS.some(a => a.key === key);
+  const SUGGESTIONS = [
+    'How are heat pumps changing home heating in Europe?',
+    'What is the state of solid-state batteries in 2026?',
+    'How is AI changing hiring for junior developers?',
+  ];
+  const MAX_FACT_CARDS = 8;
+  const DATE_FMT = { day: 'numeric', month: 'short', year: 'numeric' };
+  const TIME_FMT = { hour: '2-digit', minute: '2-digit' };
 
-  let lastReport = '';
+  const $ = id => document.getElementById(id);
+  const isAgent = key => STATIONS.some(s => s.key === key);
 
-  // Everything shown on the page comes from LLM output or web content, so escape it
+  let lastReport = null;     // { draft, query, created_at, ... }
+  let running = false;
+  let leadsDone = 0;
+  let revision = 0;
+
+  // Everything shown comes from LLM output or web content, so escape it
   const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-  function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, c => HTML_ESCAPES[c]);
-  }
+  const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => HTML_ESCAPES[c]);
 
   function markdownToSafeHtml(md) {
-    if (window.marked && window.DOMPurify) {
-      return DOMPurify.sanitize(marked.parse(md));
-    }
-    // CDN blocked: fall back to plain text rather than unsafe HTML
-    return `<p style="white-space:pre-wrap">${escapeHtml(md)}</p>`;
+    if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(md));
+    return `<p style="white-space:pre-wrap">${escapeHtml(md)}</p>`;   // CDN blocked: plain text, never raw HTML
   }
-
   if (window.DOMPurify) {
     DOMPurify.addHook('afterSanitizeAttributes', node => {
-      if (node.tagName === 'A') {
-        node.setAttribute('target', '_blank');
-        node.setAttribute('rel', 'noopener noreferrer');
-      }
+      if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
     });
   }
 
-  // Build sidebar agent rows
-  const agentList = document.getElementById('agentList');
-  agentList.innerHTML = AGENTS.map((a, i) => `
-      <div class="agent-item" id="agent-${a.key}">
-        <span class="agent-idx">${String(i+1).padStart(2,'0')}</span>
-        <div class="agent-info">
-          <div class="agent-name">${a.label}</div>
-          <div class="agent-msg" id="msg-${a.key}">${a.sub}</div>
-        </div>
-        <div class="spinner"></div>
-        <div class="agent-check">✓</div>
-      </div>`).join('');
+  const formatDate = iso => new Date(iso).toLocaleDateString('en-GB', DATE_FMT);
+  const formatTime = iso => new Date(iso).toLocaleTimeString('en-GB', TIME_FMT);
 
-  function handleKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runResearch(); }
+  /* ───────── Theme ───────── */
+  function initTheme() {
+    let saved = null;
+    try { saved = localStorage.getItem('desk-theme'); } catch {}
+    if (saved) document.documentElement.dataset.theme = saved;
+    $('themeToggle').addEventListener('click', () => {
+      const current = document.documentElement.dataset.theme
+        || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = next;
+      try { localStorage.setItem('desk-theme', next); } catch {}
+    });
   }
 
-  function setStatus(text, active = false) {
-    document.getElementById('statusText').textContent = text;
-    document.getElementById('statusPill').className = 'status-pill' + (active ? ' active' : '');
+  /* ───────── Status ───────── */
+  function setStatus(kind, text) {
+    $('status').dataset.kind = kind;
+    $('statusText').textContent = text;
   }
 
-  function updateProgress() {
-    const done = document.querySelectorAll('.agent-item.done').length;
-    const pct  = Math.round((done / AGENTS.length) * 100);
-    document.getElementById('progressFill').style.width = pct + '%';
-    document.getElementById('progressPct').textContent  = pct + '%';
+  /* ───────── Stations ───────── */
+  function renderStations() {
+    const list = $('stations');
+    list.innerHTML = '';
+    STATIONS.forEach((s, i) => {
+      list.insertAdjacentHTML('beforeend', `
+        <li class="station" id="st-${s.key}">
+          <span class="station-num">${String(i + 1).padStart(2, '0')}</span>
+          <div class="station-role">${s.role}</div>
+          <div class="station-agent">${s.agent}</div>
+          <p class="station-msg" id="msg-${s.key}">${s.idle}</p>
+          <span class="stamp" id="stamp-${s.key}">FILED</span>
+        </li>`);
+    });
   }
 
-  function setAgentState(key, state, msg = '') {
-    const el = document.getElementById(`agent-${key}`);
+  function setStation(key, state, msg) {
+    const el = $(`st-${key}`);
     if (!el) return;
-    el.className = `agent-item ${state}`;
-    if (msg) document.getElementById(`msg-${key}`).textContent = msg;
+    el.className = `station ${state || ''}`.trim();
+    if (msg) $(`msg-${key}`).textContent = msg;
+    $(`stamp-${key}`).textContent = state === 'sent-back' ? 'REVISE' : 'FILED';
     updateProgress();
   }
 
-  function resetAgents() {
-    AGENTS.forEach(a => setAgentState(a.key, '', a.sub));
-    document.getElementById('factsSection').style.display = 'none';
-    document.getElementById('factsList').innerHTML = '';
-    document.getElementById('progressWrap').style.display = 'block';
+  function updateProgress() {
+    const done = document.querySelectorAll('.station.done').length;
+    $('progressLine').style.width = `${(done / STATIONS.length) * 100}%`;
+    const active = document.querySelector('.station.active .station-role');
+    if (running) $('progressMeta').textContent = `${done} of ${STATIONS.length} desks filed${active ? ` · now: ${active.textContent}` : ''}`;
   }
 
-  function addLog(agent, msg, done = false) {
-    const log = document.getElementById('logStream');
-    if (!log) return;
-    const now = new Date().toLocaleTimeString('en-GB', { hour12: false });
-    log.insertAdjacentHTML('beforeend', `
-      <div class="log-line${done ? ' done' : ''}">
-        <span class="log-time">${now}</span>
-        <span class="log-agent">[${escapeHtml(agent)}]</span>
-        <span class="log-msg">${escapeHtml(msg)}</span>
-      </div>`);
+  function resetNewsroom() {
+    STATIONS.forEach(s => setStation(s.key, '', s.idle));
+    leadsDone = 0;
+    revision = 0;
+    $('leadList').innerHTML = ''; $('leadEmpty').hidden = false; $('leadCount').textContent = '';
+    $('factCards').innerHTML = ''; $('factEmpty').hidden = false; $('factCount').textContent = '';
+  }
+
+  /* ───────── Rail ───────── */
+  function showLeads(leads) {
+    $('leadList').innerHTML = leads.map((l, i) =>
+      `<li style="animation-delay:${i * 0.06}s">${escapeHtml(l)}</li>`).join('');
+    $('leadEmpty').hidden = leads.length > 0;
+    $('leadCount').textContent = `0 / ${leads.length}`;
+  }
+
+  function checkNextLead() {
+    const items = $('leadList').querySelectorAll('li');
+    if (leadsDone < items.length) items[leadsDone].classList.add('checked');
+    leadsDone++;
+    if (items.length) $('leadCount').textContent = `${Math.min(leadsDone, items.length)} / ${items.length}`;
   }
 
   function showFacts(facts) {
-    const list = document.getElementById('factsList');
-    list.innerHTML = facts.map((f, i) => `
-      <div class="fact-item" style="animation-delay:${i * 0.05}s">
-        <span class="fact-num">${String(i+1).padStart(2,'0')}</span>
-        <span>${escapeHtml(f)}</span>
-      </div>`).join('');
-    document.getElementById('factsSection').style.display = 'block';
+    const shown = facts.slice(0, MAX_FACT_CARDS);
+    $('factCards').innerHTML = shown.map((f, i) => `
+      <div class="fact-card" style="animation-delay:${i * 0.05}s"><b>FACT ${String(i + 1).padStart(2, '0')}</b>${escapeHtml(f)}</div>`).join('')
+      + (facts.length > shown.length ? `<p class="facts-more">+ ${facts.length - shown.length} more in the report</p>` : '');
+    $('factEmpty').hidden = facts.length > 0;
+    $('factCount').textContent = facts.length ? String(facts.length) : '';
   }
 
-  function showError(html) {
-    document.getElementById('outputArea')
-      .insertAdjacentHTML('afterbegin', `<div class="error-box">⚠ ${html}</div>`);
-    setStatus('Error', false);
-    AGENTS.forEach(a => {
-      if (document.getElementById(`agent-${a.key}`).classList.contains('running')) setAgentState(a.key, '');
-    });
+  async function loadArchive() {
+    try {
+      const res = await fetch(`${API}/history`);
+      if (!res.ok) return;
+      const runs = await res.json();
+      if (!Array.isArray(runs) || !runs.length) return;
+      const recent = runs.slice(0, 6);
+      $('archiveList').innerHTML = recent.map(r => `
+        <li><button type="button" data-id="${Number(r.id)}">
+          <span class="archive-date">${formatDate(r.created_at)} · No. ${Number(r.id)}</span>
+          <span class="archive-q">${escapeHtml(r.query)}</span>
+        </button></li>`).join('');
+      $('archiveCount').textContent = String(runs.length >= 20 ? '20+' : runs.length);
+      $('archiveSection').hidden = false;
+    } catch { /* history is optional */ }
   }
 
-  function renderReport(data) {
-    lastReport = data.draft || '';
-    const score = data.score ? ` · ${data.score}/10` : '';
-    const date  = data.created_at
-      ? new Date(data.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-      : '—';
-    const saved = data.saved ? ` · saved #${data.id}` : '';
-    document.getElementById('outputArea').innerHTML = `
-      <div class="report-wrap">
-        <div class="report-meta">
-          <div class="report-meta-item">Date <span class="report-meta-val">${escapeHtml(date + saved)}</span></div>
-          <div class="report-meta-item">Facts <span class="report-meta-val">${data.facts?.length ?? '—'}</span></div>
-          <div class="report-meta-item">Revisions <span class="report-meta-val">${data.revision ?? '—'}</span></div>
-          <div class="report-meta-item">Grade <span class="report-meta-val">${escapeHtml(data.grade || '—')}${score}</span></div>
-          <div class="report-meta-item">Query <span class="report-meta-val" style="font-style:italic;text-transform:none;letter-spacing:0">${escapeHtml(data.query)}</span></div>
-        </div>
-        <div class="report-body">${markdownToSafeHtml(lastReport)}</div>
-        <button class="copy-btn" onclick="copyReport()">⎘ Copy report</button>
+  async function openArchived(id) {
+    if (running) return;
+    try {
+      const res = await fetch(`${API}/history/${encodeURIComponent(id)}`);
+      if (!res.ok) throw new Error(`Could not open report No. ${id}`);
+      const run = await res.json();
+      STATIONS.forEach(s => setStation(s.key, 'done'));
+      $('progressMeta').textContent = `Archived edition · No. ${run.id}`;
+      showFacts(Array.isArray(run.facts) ? run.facts : []);
+      renderReport({ ...run, saved: true });
+      $('main').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      showCorrection(escapeHtml(e.message));
+    }
+  }
+
+  /* ───────── Main column ───────── */
+  function showBlankFront() {
+    $('main').replaceChildren($('blankFront').content.cloneNode(true));
+  }
+
+  function showWire() {
+    $('main').innerHTML = `
+      <div class="wire">
+        <div class="wire-head"><h2>On the wire</h2><span class="live">LIVE</span></div>
+        <div id="wireLines"></div>
       </div>`;
   }
 
-  function copyReport() {
-    navigator.clipboard.writeText(lastReport).then(() => {
-      const btn = document.querySelector('.copy-btn');
-      btn.textContent = '✓ Copied';
-      setTimeout(() => btn.textContent = '⎘ Copy report', 2000);
-    });
+  function addWire(who, msg) {
+    const lines = $('wireLines');
+    if (!lines) return;
+    const now = new Date().toLocaleTimeString('en-GB', { hour12: false });
+    const label = STATIONS.find(s => s.key === who)?.agent || who;
+    lines.insertAdjacentHTML('beforeend', `
+      <div class="wire-line${who === 'system' ? ' system' : ''}">
+        <span class="wire-time">${now}</span>
+        <span class="wire-who">${escapeHtml(label)}</span>
+        <span>${escapeHtml(msg)}</span>
+      </div>`);
   }
 
+  function showCorrection(html) {
+    $('main').insertAdjacentHTML('afterbegin', `<div class="correction" role="alert"><strong>CORRECTION</strong>${html}</div>`);
+    setStatus('error', 'Correction issued');
+    document.querySelectorAll('.station.active').forEach(el => el.classList.remove('active'));
+  }
+
+  function renderReport(data) {
+    lastReport = data;
+    const created = data.created_at ? new Date(data.created_at) : new Date();
+    const grade = data.grade ? `<span class="${data.grade === 'pass' ? 'grade-pass' : ''}">Editor: <b>${escapeHtml(data.grade === 'pass' ? 'approved' : data.grade)}</b>${data.score ? ` · ${Number(data.score)}/10` : ''}</span>` : '';
+    const revs = data.revision ? `<span>Drafts: <b>${Number(data.revision)}</b></span>` : '';
+    const facts = Array.isArray(data.facts) ? `<span>Facts: <b>${data.facts.length}</b></span>` : '';
+    const filed = data.saved && data.id ? `<span>Filed as <b>No. ${Number(data.id)}</b></span>` : '';
+
+    $('main').innerHTML = `
+      <article class="article">
+        <span class="kicker">Research report · ${created.toLocaleDateString('en-GB', { weekday: 'long', ...DATE_FMT })}</span>
+        <h2 class="article-title">${escapeHtml(data.query)}</h2>
+        <div class="dateline">
+          <span><b>${formatTime(created)}</b> · ${formatDate(created)}</span>
+          ${grade}${revs}${facts}${filed}
+        </div>
+        <div class="article-body">${markdownToSafeHtml(data.draft || '')}</div>
+        <div class="article-actions">
+          <button class="ghost-btn" type="button" data-action="copy">Copy text</button>
+          <button class="ghost-btn" type="button" data-action="download">Download .md</button>
+          <button class="ghost-btn" type="button" data-action="print">Print / PDF</button>
+        </div>
+      </article>`;
+  }
+
+  function reportMarkdown() {
+    const r = lastReport;
+    const date = r.created_at ? new Date(r.created_at) : new Date();
+    return `# ${r.query}\n\n_Filed ${date.toLocaleString('en-GB', { ...DATE_FMT, ...TIME_FMT })} by The Research Desk_\n\n${r.draft}\n`;
+  }
+
+  function handleArticleAction(action, btn) {
+    if (!lastReport) return;
+    if (action === 'copy') {
+      navigator.clipboard.writeText(reportMarkdown()).then(() => {
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => (btn.textContent = 'Copy text'), 1800);
+      });
+    } else if (action === 'download') {
+      const date = (lastReport.created_at || new Date().toISOString()).slice(0, 10);
+      const url = URL.createObjectURL(new Blob([reportMarkdown()], { type: 'text/markdown' }));
+      const a = Object.assign(document.createElement('a'), { href: url, download: `research-report-${date}.md` });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } else if (action === 'print') {
+      window.print();
+    }
+  }
+
+  /* ───────── Pipeline events ───────── */
   // Returns true once the final report has been rendered
   function handleEvent({ agent, message, payload, next }) {
     if (agent === 'error') throw new Error(message);
 
     if (agent === 'done') {
-      AGENTS.forEach(a => setAgentState(a.key, 'done'));
+      STATIONS.forEach(s => setStation(s.key, 'done'));
+      running = false;
+      $('progressMeta').textContent = 'All desks filed';
       renderReport(payload);
-      setStatus('Done', false);
+      setStatus('filed', 'Filed');
+      loadArchive();
       return true;
     }
-
     if (!isAgent(agent)) return false;
 
-    setAgentState(agent, 'done', message);
-    addLog(agent, message, true);
+    addWire(agent, message);
 
-    if (agent === 'planner') payload.forEach((t, i) => addLog('planner', `${i + 1}. ${t}`));
-    if (agent === 'synthesizer' && payload.length) showFacts(payload);
-    if (agent === 'grader' && payload) addLog('grader', `Feedback: ${payload}`);
+    if (agent === 'planner' && Array.isArray(payload)) showLeads(payload);
+    if (agent === 'web_searcher') checkNextLead();
+    if (agent === 'synthesizer' && Array.isArray(payload)) showFacts(payload);
+    if (agent === 'writer') revision++;
+    if (agent === 'grader' && payload) addWire('grader', `Note to writer: ${payload}`);
 
-    // The supervisor tells us who acts next (the searcher repeats, the writer may revise)
-    if (isAgent(next)) {
-      if (agent === 'grader' && next === 'writer') setAgentState('grader', '', 'Revision requested');
-      setAgentState(next, 'running');
+    // The supervisor says who acts next: the reporter repeats per lead, the writer may revise
+    if (agent === 'grader' && next === 'writer') {
+      setStation('grader', 'sent-back', 'Sent back for revision');
+      setStation('writer', 'active', `Revising — draft ${revision + 1}`);
+      return false;
     }
+    setStation(agent, next === agent ? 'active' : 'done', message);
+    if (isAgent(next) && next !== agent) setStation(next, 'active');
     return false;
   }
 
-  async function runResearch() {
-    const query = document.getElementById('queryInput').value.trim();
-    if (query.length < 3) return;
+  async function runResearch(query) {
+    running = true;
+    $('runBtn').disabled = true;
+    $('queryHint').textContent = '';
+    setStatus('running', 'On deadline');
+    resetNewsroom();
+    showWire();
+    setStation('planner', 'active', 'Reading the assignment');
+    addWire('system', `Assignment received — “${query}”`);
 
-    const runBtn = document.getElementById('runBtn');
-    runBtn.disabled = true;
-    setStatus('Running', true);
-    resetAgents();
-    lastReport = '';
-
-    const output = document.getElementById('outputArea');
-    output.innerHTML = `<div class="log-stream" id="logStream"></div>`;
-
-    setAgentState('planner', 'running');
-    addLog('system', `Research started — "${query}"`);
-
-    // Free hosting tiers sleep when idle; tell the visitor instead of looking frozen
+    // Free hosting sleeps when idle; say so instead of looking frozen
     const wakeTimer = setTimeout(() => {
-      setStatus('Waking server…', true);
-      addLog('system', 'The server is waking up from sleep — the first request can take up to a minute.');
+      setStatus('running', 'Waking the desk');
+      addWire('system', 'The desk is waking up from sleep — the first story can take up to a minute.');
     }, 5000);
 
     let response;
@@ -882,26 +978,23 @@
         body: JSON.stringify({ query }),
       });
       clearTimeout(wakeTimer);
-      setStatus('Running', true);
+      setStatus('running', 'On deadline');
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         const detail = Array.isArray(body.detail) ? body.detail[0]?.msg : body.detail;
-        throw new Error(detail || `Server responded with ${response.status}`);
+        throw new Error(detail || `The desk responded with ${response.status}`);
       }
 
-      const reader  = response.body.getReader();
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop();
-
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           let data;
@@ -909,16 +1002,100 @@
           if (handleEvent(data)) return;
         }
       }
-      throw new Error('The connection closed before the report was finished. Please try again.');
+      throw new Error('The line went dead before the story was filed. Please try again.');
     } catch (e) {
       clearTimeout(wakeTimer);
-      showError(!response   // fetch() itself failed: network down or server unreachable
-        ? 'Cannot reach the research API. Check your connection and try again.'
+      showCorrection(!response   // fetch() itself failed: network down or server unreachable
+        ? 'The desk can’t be reached right now. Check your connection and try again.'
         : escapeHtml(e.message));
     } finally {
-      runBtn.disabled = false;
+      running = false;
+      $('runBtn').disabled = false;
     }
   }
+
+  /* ───────── Composer ───────── */
+  function autosize(el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; }
+
+  function initComposer() {
+    const input = $('queryInput');
+    const counter = $('counter');
+
+    input.addEventListener('input', () => {
+      autosize(input);
+      counter.textContent = `${input.value.length} / 500`;
+      counter.classList.toggle('over', input.value.length >= 480);
+      if (input.value.trim().length >= 3) $('queryHint').textContent = '';
+    });
+    // The display font changes line height once it loads, and width changes rewrap the text
+    document.fonts?.ready.then(() => autosize(input));
+    window.addEventListener('resize', () => autosize(input));
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('queryForm').requestSubmit(); }
+    });
+
+    $('queryForm').addEventListener('submit', e => {
+      e.preventDefault();
+      if (running) return;
+      const query = input.value.trim();
+      if (query.length < 3) {
+        $('queryHint').textContent = 'Give the desk a little more to go on — at least a few words.';
+        const field = $('queryField');
+        field.classList.remove('shake'); void field.offsetWidth; field.classList.add('shake');
+        input.focus();
+        return;
+      }
+      runResearch(query);
+    });
+
+    const box = $('suggestions');
+    SUGGESTIONS.forEach((s, i) => {
+      if (i) box.insertAdjacentHTML('beforeend', '<span class="lead-sep" aria-hidden="true">/</span>');
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'lead-chip', textContent: s });
+      b.addEventListener('click', () => {
+        input.value = s;
+        input.dispatchEvent(new Event('input'));
+        input.focus();
+      });
+      box.appendChild(b);
+    });
+  }
+
+  /* ───────── Warm-up: wake the free-tier API while the visitor types ───────── */
+  const stillOpening = () => $('status').dataset.kind === 'opening';
+
+  async function warmUp() {
+    setStatus('opening', 'Opening the desk');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 90000);
+    try {
+      const res = await fetch(`${API}/health`, { signal: controller.signal });
+      // Only answer the "opening" state: a run may have started (or finished) meanwhile
+      if (stillOpening()) setStatus(res.ok ? 'open' : 'error', res.ok ? 'Desk open' : 'Desk unavailable');
+      if (res.ok) loadArchive();
+    } catch {
+      if (stillOpening()) setStatus('error', 'Desk unreachable');
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /* ───────── Boot ───────── */
+  $('todayLine').innerHTML = `<b>${new Date().toLocaleDateString('en-GB', { weekday: 'long', ...DATE_FMT })}</b> · Vol. I`;
+  initTheme();
+  renderStations();
+  initComposer();
+  showBlankFront();
+  warmUp();
+
+  $('main').addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (btn) handleArticleAction(btn.dataset.action, btn);
+  });
+  $('archiveList').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-id]');
+    if (btn) openArchived(btn.dataset.id);
+  });
 </script>
 </body>
 </html>
